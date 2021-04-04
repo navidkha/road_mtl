@@ -3,6 +3,9 @@ import sys
 import torch
 import argparse
 import numpy as np
+from torchvision import transforms
+import torch.utils as tutils
+from random import shuffle
 
 
 parser = argparse.ArgumentParser(description='Training')
@@ -28,6 +31,26 @@ parser.add_argument('--MAX_SEQ_STEP', default=1,
                     type=int, help='DIFFERENCE of gap between the frames of sequence')
 
 args = parser.parse_args()
+
+
+def is_part_of_subsets(split_ids, SUBSETS):
+    
+    is_it = False
+    for subset in SUBSETS:
+        if subset in split_ids:
+            is_it = True
+    
+    return is_it
+
+def filter_labels(ids, all_labels, used_labels):
+    """Filter the used ids"""
+    used_ids = []
+    for id in ids:
+        label = all_labels[id]
+        if label in used_labels:
+            used_ids.append(used_labels.index(label))
+    
+    return used_ids
 
 
 class VideoDataset(tutils.data.Dataset):
@@ -98,7 +121,7 @@ class VideoDataset(tutils.data.Dataset):
                     frame_index = frame_num-1  
                     frame_level_annos[frame_index]['labeled'] = True 
                     frame_level_annos[frame_index]['ego_label'] = frames[frame_id]['av_action_ids'][0]
-                    
+
                     frame = frames[frame_id]
                     if 'annos' not in frame.keys():
                         frame = {'annos':{}}
@@ -120,3 +143,27 @@ class VideoDataset(tutils.data.Dataset):
                         
                         all_boxes.append(box)
                         box_labels = np.zeros(self.num_classes)
+                        list_box_labels = []
+                        cc = 1
+                        for idx, name in enumerate(self.label_types):
+                            filtered_ids = filter_labels(anno[name+'_ids'], final_annots['all_'+name+'_labels'], final_annots[name+'_labels'])
+                            list_box_labels.append(filtered_ids)
+                            for fid in filtered_ids:
+                                box_labels[fid+cc] = 1
+                                box_labels[0] = 1
+                            cc += self.num_classes_list[idx+1]
+
+                        all_labels.append(box_labels)
+
+                        # for box_labels in all_labels:
+                        for k, bls in enumerate(list_box_labels):
+                            for l in bls:
+                                counts[l, k] += 1 
+
+                    all_labels = np.asarray(all_labels, dtype=np.float32)
+                    all_boxes = np.asarray(all_boxes, dtype=np.float32)
+
+                    if all_boxes.shape[0]>0:
+                        frames_with_boxes += 1    
+                    frame_level_annos[frame_index]['labels'] = all_labels
+                    frame_level_annos[frame_index]['boxes'] = all_boxes 
