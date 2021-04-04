@@ -28,3 +28,19 @@ parser.add_argument('--MAX_SEQ_STEP', default=1,
                     type=int, help='DIFFERENCE of gap between the frames of sequence')
 
 args = parser.parse_args()
+
+
+class VideoDataset(tutils.data.Dataset):
+    """
+    ROAD Detection dataset class for pytorch dataloader
+    """
+
+    def __init__(self, args, input_type='rgb', skip_step=1):
+
+        self.SUBSETS = args.TRAIN_SUBSETS
+        self.SEQ_LEN = args.SEQ_LEN
+        self.BATCH_SIZE = args.BATCH_SIZE
+        self.MIN_SEQ_STEP = args.MIN_SEQ_STEP
+        self.MAX_SEQ_STEP = args.MAX_SEQ_STEP
+        # self.MULIT_SCALE = args.MULIT_SCALE
+        self.skip_step = args.SEQ_LEN
