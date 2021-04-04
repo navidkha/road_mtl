@@ -42,5 +42,19 @@ class VideoDataset(tutils.data.Dataset):
         self.BATCH_SIZE = args.BATCH_SIZE
         self.MIN_SEQ_STEP = args.MIN_SEQ_STEP
         self.MAX_SEQ_STEP = args.MAX_SEQ_STEP
-        # self.MULIT_SCALE = args.MULIT_SCALE
         self.skip_step = args.SEQ_LEN
+        self.num_steps = max(1, int(self.MAX_SEQ_STEP - self.MIN_SEQ_STEP + 1 )//2)
+        self.input_type = input_type+'-images'
+        self.root = args.DATA_ROOT + '/'
+        self._imgpath = os.path.join(self.root, self.input_type)
+        self.ids = list()
+        self._make_lists_road()
+
+    def _make_lists_road(self):
+
+        self.anno_file  = os.path.join(self.root, 'road_trainval_v1.0.json')
+
+        with open(self.anno_file,'r') as fff:
+            final_annots = json.load(fff)
+        
+        database = final_annots['db']
