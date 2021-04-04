@@ -98,3 +98,25 @@ class VideoDataset(tutils.data.Dataset):
                     frame_index = frame_num-1  
                     frame_level_annos[frame_index]['labeled'] = True 
                     frame_level_annos[frame_index]['ego_label'] = frames[frame_id]['av_action_ids'][0]
+                    
+                    frame = frames[frame_id]
+                    if 'annos' not in frame.keys():
+                        frame = {'annos':{}}
+                    
+                    all_boxes = []
+                    all_labels = []
+                    frame_annos = frame['annos']
+                    for key in frame_annos:
+                        width, height = frame['width'], frame['height']
+                        anno = frame_annos[key]
+                        box = anno['box']
+                        
+                        assert box[0]<box[2] and box[1]<box[3], box
+                        assert width==1280 and height==960, (width, height, box)
+
+                        for bi in range(4):
+                            assert 0<=box[bi]<=1.01, box
+                            box[bi] = min(1.0, max(0, box[bi]))
+                        
+                        all_boxes.append(box)
+                        box_labels = np.zeros(self.num_classes)
