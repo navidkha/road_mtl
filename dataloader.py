@@ -166,4 +166,36 @@ class VideoDataset(tutils.data.Dataset):
                     if all_boxes.shape[0]>0:
                         frames_with_boxes += 1    
                     frame_level_annos[frame_index]['labels'] = all_labels
-                    frame_level_annos[frame_index]['boxes'] = all_boxes 
+                    frame_level_annos[frame_index]['boxes'] = all_boxes
+
+            ## make ids
+            start_frames = [ f for f in range(numf-self.MIN_SEQ_STEP*self.SEQ_LEN, -1,  -self.skip_step)]
+            for frame_num in start_frames:
+                step_list = [s for s in range(self.MIN_SEQ_STEP, self.MAX_SEQ_STEP+1) if numf-s*self.SEQ_LEN>=frame_num]
+                shuffle(step_list)
+                # print(len(step_list), self.num_steps)
+                for s in range(min(self.num_steps, len(step_list))):
+                    video_id = self.video_list.index(videoname)
+                    self.ids.append([video_id, frame_num ,step_list[s]])
+
+        ptrstr = ''
+        self.frame_level_list = frame_level_list
+        self.all_classes = [['agent_ness']]
+        for k, name in enumerate(self.label_types):
+            labels = final_annots[name+'_labels']
+            self.all_classes.append(labels)
+            # self.num_classes_list.append(len(labels))
+            for c, cls_ in enumerate(labels): # just to see the distribution of train and test sets
+                ptrstr += '-'.join(self.SUBSETS) + ' {:05d} label: ind={:02d} name:{:s}\n'.format(
+                                                counts[c,k] , c, cls_)
+        
+        ptrstr += 'Number of ids are {:d}\n'.format(len(self.ids))
+
+        self.label_types = ['agent_ness'] + self.label_types
+        self.childs = {'duplex_childs':final_annots['duplex_childs'], 'triplet_childs':final_annots['triplet_childs']}
+        self.num_videos = len(self.video_list)
+        self.print_str = ptrstr
+        print(self.print_str)
+
+dataset = VideoDataset(args)
+ 
