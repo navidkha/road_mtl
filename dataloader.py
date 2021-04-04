@@ -72,3 +72,29 @@ class VideoDataset(tutils.data.Dataset):
         self.num_ego_classes = len(self.ego_classes)
         
         counts = np.zeros((len(final_annots[self.label_types[-1] + '_labels']), num_label_type), dtype=np.int32)
+
+        self.video_list = []
+        self.numf_list = []
+        frame_level_list = []
+
+        for videoname in sorted(database.keys()):
+            
+            # if not is_part_of_subsets(final_annots['db'][videoname]['split_ids'], self.SUBSETS):
+            #     continue
+            
+            numf = database[videoname]['numf']
+            self.numf_list.append(numf)
+            self.video_list.append(videoname)
+            
+            frames = database[videoname]['frames']
+            frame_level_annos = [ {'labeled':False,'ego_label':-1,'boxes':np.asarray([]),'labels':np.asarray([])} for _ in range(numf)]
+
+            frame_nums = [int(f) for f in frames.keys()]
+            frames_with_boxes = 0
+            for frame_num in sorted(frame_nums): #loop from start to last possible frame which can make a legit sequence
+                frame_id = str(frame_num)
+                if frame_id in frames.keys() and frames[frame_id]['annotated']>0:
+                    
+                    frame_index = frame_num-1  
+                    frame_level_annos[frame_index]['labeled'] = True 
+                    frame_level_annos[frame_index]['ego_label'] = frames[frame_id]['av_action_ids'][0]
