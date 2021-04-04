@@ -58,3 +58,17 @@ class VideoDataset(tutils.data.Dataset):
             final_annots = json.load(fff)
         
         database = final_annots['db']
+
+        self.label_types =  final_annots['label_types'] #['agent', 'action', 'loc', 'duplex', 'triplet'] #
+        num_label_type = 5
+        self.num_classes = 1 
+        self.num_classes_list = [1]
+        for name in self.label_types: 
+            numc = len(final_annots[name+'_labels'])
+            self.num_classes_list.append(numc)
+            self.num_classes += numc
+        
+        self.ego_classes = final_annots['av_action_labels']
+        self.num_ego_classes = len(self.ego_classes)
+        
+        counts = np.zeros((len(final_annots[self.label_types[-1] + '_labels']), num_label_type), dtype=np.int32)
