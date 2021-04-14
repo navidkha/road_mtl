@@ -4,8 +4,12 @@ import torch
 import argparse
 import numpy as np
 from torchvision import transforms
+from torchvision.transforms import functional as F
 import torch.utils as tutils
 from random import shuffle
+from PIL import Image, ImageDraw
+import torch.utils.data as data_utils
+
 
 
 parser = argparse.ArgumentParser(description='Training')
@@ -58,20 +62,25 @@ class VideoDataset(tutils.data.Dataset):
     ROAD Detection dataset class for pytorch dataloader
     """
 
-    def __init__(self, args, input_type='rgb', skip_step=1):
+    def __init__(self, args, input_type='rgb', skip_step=1, train=True, transform=None):
 
         self.SUBSETS = args.TRAIN_SUBSETS
         self.SEQ_LEN = args.SEQ_LEN
         self.BATCH_SIZE = args.BATCH_SIZE
         self.MIN_SEQ_STEP = args.MIN_SEQ_STEP
         self.MAX_SEQ_STEP = args.MAX_SEQ_STEP
+        # self.MULIT_SCALE = args.MULIT_SCALE
         self.skip_step = args.SEQ_LEN
         self.num_steps = max(1, int(self.MAX_SEQ_STEP - self.MIN_SEQ_STEP + 1 )//2)
+        # self.input_type = input_type
         self.input_type = input_type+'-images'
         self.root = args.DATA_ROOT + '/'
+        self.train = train
         self._imgpath = os.path.join(self.root, self.input_type)
-        self.ids = list()
+        # self.image_sets = image_sets
+        self.ids = list()  
         self._make_lists_road()
+        self.transform = transform
 
     def _make_lists_road(self):
 
@@ -81,10 +90,11 @@ class VideoDataset(tutils.data.Dataset):
             final_annots = json.load(fff)
         
         database = final_annots['db']
-
+        
         self.label_types =  final_annots['label_types'] #['agent', 'action', 'loc', 'duplex', 'triplet'] #
+        
         num_label_type = 5
-        self.num_classes = 1 
+        self.num_classes = 1 ## one for presence
         self.num_classes_list = [1]
         for name in self.label_types: 
             numc = len(final_annots[name+'_labels'])
@@ -121,7 +131,7 @@ class VideoDataset(tutils.data.Dataset):
                     frame_index = frame_num-1  
                     frame_level_annos[frame_index]['labeled'] = True 
                     frame_level_annos[frame_index]['ego_label'] = frames[frame_id]['av_action_ids'][0]
-
+                    
                     frame = frames[frame_id]
                     if 'annos' not in frame.keys():
                         frame = {'annos':{}}
@@ -168,6 +178,8 @@ class VideoDataset(tutils.data.Dataset):
                     frame_level_annos[frame_index]['labels'] = all_labels
                     frame_level_annos[frame_index]['boxes'] = all_boxes
 
+            frame_level_list.append(frame_level_annos) 
+
             ## make ids
             start_frames = [ f for f in range(numf-self.MIN_SEQ_STEP*self.SEQ_LEN, -1,  -self.skip_step)]
             for frame_num in start_frames:
@@ -177,7 +189,7 @@ class VideoDataset(tutils.data.Dataset):
                 for s in range(min(self.num_steps, len(step_list))):
                     video_id = self.video_list.index(videoname)
                     self.ids.append([video_id, frame_num ,step_list[s]])
-
+        # pdb.set_trace()
         ptrstr = ''
         self.frame_level_list = frame_level_list
         self.all_classes = [['agent_ness']]
@@ -185,7 +197,7 @@ class VideoDataset(tutils.data.Dataset):
             labels = final_annots[name+'_labels']
             self.all_classes.append(labels)
             # self.num_classes_list.append(len(labels))
-            for c, cls_ in enumerate(labels): # just to see the distribution of train and test sets
+            for c, cls_ in enumerate(labels): 
                 ptrstr += '-'.join(self.SUBSETS) + ' {:05d} label: ind={:02d} name:{:s}\n'.format(
                                                 counts[c,k] , c, cls_)
         
@@ -195,7 +207,49 @@ class VideoDataset(tutils.data.Dataset):
         self.childs = {'duplex_childs':final_annots['duplex_childs'], 'triplet_childs':final_annots['triplet_childs']}
         self.num_videos = len(self.video_list)
         self.print_str = ptrstr
-        print(self.print_str)
 
-dataset = VideoDataset(args)
- 
+    def __len__(self):
+        return len(self.ids)
+
+    def __getitem__(self, index):
+        id_info = self.ids[index]
+        video_id, start_frame, step_size = id_info
+        videoname = self.video_list[video_id]
+        images = []
+        frame_num = start_frame
+        ego_labels = np.zeros(self.SEQ_LEN)-1
+        all_boxes = []
+        labels = []
+        ego_labels = []
+        mask = np.zeros(self.SEQ_LEN, dtype=np.int)
+        # indexs = []
+        print(self.frame_level_list)
+        for i in range(self.SEQ_LEN):
+            img_name = self._imgpath + '/{:s}/{:05d}.jpg'.format(videoname, frame_num+1)
+
+            img = Image.open(img_name).convert('RGB')
+            images.append(img)
+            if self.frame_level_list[video_id][frame_num]['labeled']:
+                mask[i] = 1
+                all_boxes.append(self.frame_level_list[video_id][frame_num]['boxes'].copy())
+                labels.append(self.frame_level_list[video_id][frame_num]['labels'].copy())
+                ego_labels.append(self.frame_level_list[video_id][frame_num]['ego_label'])
+            else:
+                all_boxes.append(np.asarray([]))
+                labels.append(np.asarray([]))
+                ego_labels.append(-1)            
+            frame_num += step_size
+
+        clip =  torch.stack([F.to_tensor(img) for img in images], 1)
+        height, width = clip.shape[-2:]
+        wh = [height, width]
+
+
+        return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
+    
+
+train_dataset = VideoDataset(args)
+#print(train_dataset.__len__())
+#clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
+#print(clip)
+
