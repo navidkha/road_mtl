@@ -9,11 +9,12 @@ import torch.utils as tutils
 from random import shuffle
 from PIL import Image, ImageDraw
 import torch.utils.data as data_utils
+import utils
 
 
 
 parser = argparse.ArgumentParser(description='Training')
-parser.add_argument('DATA_ROOT', default='../../data/data', help='Location to root directory for dataset reading') # /mnt/mars-fast/datasets/
+parser.add_argument('DATA_ROOT', help='Location to root directory for dataset reading') # /mnt/mars-fast/datasets/
 #parser.add_argument('SAVE_ROOT', help='Location to root directory for saving checkpoint models') # /mnt/mars-alpha/
 parser.add_argument('--DATASET', default='road', 
                     type=str,help='dataset being used')
@@ -33,8 +34,11 @@ parser.add_argument('--MIN_SEQ_STEP', default=1,
                     type=int, help='DIFFERENCE of gap between the frames of sequence')
 parser.add_argument('--MAX_SEQ_STEP', default=1,
                     type=int, help='DIFFERENCE of gap between the frames of sequence')
+parser.add_argument('--MIN_SIZE', default=512, 
+                    type=int, help='Input Size for FPN')
 
 args = parser.parse_args()
+args = utils.set_args(args) # set SUBSETS of datasets
 
 
 def is_part_of_subsets(split_ids, SUBSETS):
@@ -64,7 +68,7 @@ class VideoDataset(tutils.data.Dataset):
 
     def __init__(self, args, input_type='rgb', skip_step=1, train=True, transform=None):
 
-        self.SUBSETS = args.TRAIN_SUBSETS
+        self.SUBSETS = args.SUBSETS
         self.SEQ_LEN = args.SEQ_LEN
         self.BATCH_SIZE = args.BATCH_SIZE
         self.MIN_SEQ_STEP = args.MIN_SEQ_STEP
@@ -208,6 +212,8 @@ class VideoDataset(tutils.data.Dataset):
         self.num_videos = len(self.video_list)
         self.print_str = ptrstr
 
+
+
     def __len__(self):
         return len(self.ids)
 
@@ -248,8 +254,27 @@ class VideoDataset(tutils.data.Dataset):
         return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
     
 
-train_dataset = VideoDataset(args)
-#print(train_dataset.__len__())
-#clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
-#print(clip)
+if args.MODE in ['train','val']:
+    args.SUBSETS = args.TRAIN_SUBSETS
+    train_dataset = VideoDataset(args)
+
+    ## For validation set
+    full_test = False
+    args.SUBSETS = args.VAL_SUBSETS
+    skip_step = args.SEQ_LEN*8
+
+else:
+    args.MAX_SEQ_STEP = 1
+    args.SUBSETS = args.TEST_SUBSETS
+    full_test = True #args.MODE != 'train'
+
+# validation set
+val_dataset = VideoDataset(args, train=False, skip_step=skip_step)
+
+
+# print(train_dataset.__len__())
+# clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
+# print(clip)
+
+
 
