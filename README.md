@@ -1,2 +1,2 @@
 # Run command
-python dataloader.py database_directory
+python dataloader.py dataset_directory
