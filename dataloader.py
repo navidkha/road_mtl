@@ -10,6 +10,7 @@ from random import shuffle
 from PIL import Image, ImageDraw
 import torch.utils.data as data_utils
 import utils
+import transforms as vtf
 
 
 
@@ -246,7 +247,7 @@ class VideoDataset(tutils.data.Dataset):
                 ego_labels.append(-1)            
             frame_num += step_size
 
-        clip =  torch.stack([F.to_tensor(img) for img in images], 1)
+        clip = self.transform(images)
         height, width = clip.shape[-2:]
         wh = [height, width]
 
@@ -256,7 +257,11 @@ class VideoDataset(tutils.data.Dataset):
 
 if args.MODE in ['train','val']:
     args.SUBSETS = args.TRAIN_SUBSETS
-    train_dataset = VideoDataset(args)
+    train_transform = transforms.Compose([
+                        vtf.ResizeClip(args.MIN_SIZE, args.MAX_SIZE),
+                        vtf.ToTensorStack(),
+                        vtf.Normalize(mean=args.MEANS, std=args.STDS)])
+    train_dataset = VideoDataset(args, transform=train_transform)
 
     ## For validation set
     full_test = False
@@ -269,12 +274,12 @@ else:
     full_test = True #args.MODE != 'train'
 
 # validation set
-val_dataset = VideoDataset(args, train=False, skip_step=skip_step)
+# val_dataset = VideoDataset(args, train=False, skip_step=skip_step)
 
 
-# print(train_dataset.__len__())
-# clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
-# print(clip)
+#print(train_dataset.__len__())
+#clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
+#print(clip)
 
 
 
