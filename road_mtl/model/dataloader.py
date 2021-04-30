@@ -31,7 +31,7 @@ parser.add_argument('--TEST_SUBSETS', default='',
                     type=str,help='Testing SUBSETS seprated by ,')
 parser.add_argument('--MODE', default='train',
                     help='MODE can be train, gen_dets, eval_frames, eval_tubes define SUBSETS accordingly, build tubes')
-parser.add_argument('--SEQ_LEN', default=12,
+parser.add_argument('--SEQ_LEN', default=4,
                     type=int, help='Number of input frames')
 parser.add_argument('-b','--BATCH_SIZE', default=4, 
                     type=int, help='Batch size for training')
@@ -215,7 +215,7 @@ class VideoDataset(tutils.data.Dataset):
         self.childs = {'duplex_childs':final_annots['duplex_childs'], 'triplet_childs':final_annots['triplet_childs']}
         self.num_videos = len(self.video_list)
         self.print_str = ptrstr
-
+        
 
 
     def __len__(self):
@@ -252,13 +252,13 @@ class VideoDataset(tutils.data.Dataset):
         clip = self.transform(images)
         height, width = clip.shape[-2:]
         wh = [height, width]
-
-
+        clip = clip.view(3*args.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
+        print(clip.shape)
         return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
     
 
 train_transform = transforms.Compose([
-                    vtf.ResizeClip(args.MIN_SIZE, args.MAX_SIZE),
+                    vtf.ResizeClip(IMAGE_HEIGHT, IMAGE_WIDTH),
                     vtf.ToTensorStack(),
                     vtf.Normalize(mean=args.MEANS, std=args.STDS)])
 
@@ -267,9 +267,11 @@ if args.MODE in ['train','val']:
     train_dataset = VideoDataset(args, transform=train_transform)
     clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
     print("clip loaded")
-    resnet = bb._get_resnet()
+    resnet = bb.get_backbone(arch="resnet18",n_frames=args.SEQ_LEN)
     print(clip.__len__())
-    print(resnet.forward(clip).shape)
+    clip.unsqueeze_(0)
+    
+    print(resnet(clip).shape)
 
     # train_dataset.inputs_base()
 
