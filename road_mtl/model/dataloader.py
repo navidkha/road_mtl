@@ -13,6 +13,8 @@ import utils
 import transforms as vtf
 import functools
 import backbone as bb
+from active_agent_detection import ActiveAgentDetection
+from basics import make_mlp
 
 IMAGE_HEIGHT = 224
 IMAGE_WIDTH = 224
@@ -255,7 +257,17 @@ class VideoDataset(tutils.data.Dataset):
         clip = clip.view(3*args.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
         print(clip.shape)
         return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
-    
+
+
+def encode(clip):
+    """
+    we need resnet.
+    create
+    """
+
+    resnet = bb.get_backbone(arch="resnet18", n_frames=args.SEQ_LEN)
+    clip.unsqueeze_(0)
+    return resnet(clip)    
 
 train_transform = transforms.Compose([
                     vtf.ResizeClip(IMAGE_HEIGHT, IMAGE_WIDTH),
@@ -267,11 +279,11 @@ if args.MODE in ['train','val']:
     train_dataset = VideoDataset(args, transform=train_transform)
     clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
     print("clip loaded")
-    resnet = bb.get_backbone(arch="resnet18",n_frames=args.SEQ_LEN)
-    print(clip.__len__())
-    clip.unsqueeze_(0)
+    t1 = ActiveAgentDetection(args.SEQ_LEN)
+    t1.decode(encode(clip))
     
-    print(resnet(clip).shape)
+    
+ 
 
     # train_dataset.inputs_base()
 
