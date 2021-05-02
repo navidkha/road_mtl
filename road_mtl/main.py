@@ -1,3 +1,5 @@
+from torch.utils.data import DataLoader
+
 from model.dataLoader import VideoDataset
 from tasksManager import TasksManager
 from utils import ioUtils as utils
@@ -34,9 +36,14 @@ if __name__ == "__main__":
     args = utils.set_args(args)  # set SUBSETS of datasets
 
     if args.MODE in ['train', 'val']:
-        print_info("Going to load dataset ...")
-        data_loader = VideoDataset(args)
+        print_info("Loading dataset ...")
+        data_set = VideoDataset(args)
         print_info("Dataset loaded.")
+
+        data_loader = DataLoader(data_set, args.BATCH_SIZE,
+                                 num_workers=args.NUM_WORKERS,
+                                 shuffle=True, pin_memory=True,
+                                 drop_last=True)
 
         tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN)
         tasks_manager.run()
