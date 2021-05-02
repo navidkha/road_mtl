@@ -1,51 +1,24 @@
-import json, os
-import sys
-import torch
-import argparse
-import numpy as np
-from torchvision import transforms
-from torchvision.transforms import functional as F
-import torch.utils as tutils
+
+import json
+import os
 from random import shuffle
-from PIL import Image, ImageDraw
+
+import numpy as np
+import torch.utils as tutils
 import torch.utils.data as data_utils
-import utils
-import transforms as vtf
-import functools
-import backbone as bb
-from active_agent_detection import ActiveAgentDetection
-from basics import make_mlp
+from PIL import Image
+from torchvision import transforms
+
+from tasks.resnet import ResNet
+from tasks.taskCreator import TaskCreator
+
+import model.transforms as vtf
 
 IMAGE_HEIGHT = 224
 IMAGE_WIDTH = 224
 
 
-parser = argparse.ArgumentParser(description='Training')
-parser.add_argument('DATA_ROOT', help='Location to root directory for dataset reading') # /mnt/mars-fast/datasets/
-#parser.add_argument('SAVE_ROOT', help='Location to root directory for saving checkpoint models') # /mnt/mars-alpha/
-parser.add_argument('--DATASET', default='road', 
-                    type=str,help='dataset being used')
-parser.add_argument('--TRAIN_SUBSETS', default='train_3,', 
-                    type=str,help='Training SUBSETS seprated by ,')
-parser.add_argument('--VAL_SUBSETS', default='', 
-                    type=str,help='Validation SUBSETS seprated by ,')
-parser.add_argument('--TEST_SUBSETS', default='', 
-                    type=str,help='Testing SUBSETS seprated by ,')
-parser.add_argument('--MODE', default='train',
-                    help='MODE can be train, gen_dets, eval_frames, eval_tubes define SUBSETS accordingly, build tubes')
-parser.add_argument('--SEQ_LEN', default=4,
-                    type=int, help='Number of input frames')
-parser.add_argument('-b','--BATCH_SIZE', default=4, 
-                    type=int, help='Batch size for training')
-parser.add_argument('--MIN_SEQ_STEP', default=1,
-                    type=int, help='DIFFERENCE of gap between the frames of sequence')
-parser.add_argument('--MAX_SEQ_STEP', default=1,
-                    type=int, help='DIFFERENCE of gap between the frames of sequence')
-parser.add_argument('--MIN_SIZE', default=512, 
-                    type=int, help='Input Size for FPN')
 
-args = parser.parse_args()
-args = utils.set_args(args) # set SUBSETS of datasets
 
 def is_part_of_subsets(split_ids, SUBSETS):
     
@@ -72,7 +45,7 @@ class VideoDataset(tutils.data.Dataset):
     ROAD Detection dataset class for pytorch dataloader
     """
 
-    def __init__(self, args, input_type='rgb', skip_step=1, train=True, transform=None):
+    def __init__(self, args, input_type='rgb', skip_step=1, train=True):
 
         self.SUBSETS = 'train'#args.SUBSETS
         self.SEQ_LEN = args.SEQ_LEN
@@ -88,9 +61,13 @@ class VideoDataset(tutils.data.Dataset):
         self.train = train
         self._imgpath = os.path.join(self.root, self.input_type)
         # self.image_sets = image_sets
+
+        self._mean = args.MEANS
+        self._std = args.STDS
+
         self.ids = list()  
         self._make_lists_road()
-        self.transform = transform
+        self.transform = self._get_train_transform()
 
     def _make_lists_road(self):
 
@@ -217,8 +194,6 @@ class VideoDataset(tutils.data.Dataset):
         self.childs = {'duplex_childs':final_annots['duplex_childs'], 'triplet_childs':final_annots['triplet_childs']}
         self.num_videos = len(self.video_list)
         self.print_str = ptrstr
-        
-
 
     def __len__(self):
         return len(self.ids)
@@ -254,57 +229,16 @@ class VideoDataset(tutils.data.Dataset):
         clip = self.transform(images)
         height, width = clip.shape[-2:]
         wh = [height, width]
-        clip = clip.view(3*args.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
+        clip = clip.view(3*self.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
         print(clip.shape)
         return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
 
-
-def encode(clip):
-    """
-    we need resnet.
-    create
-    """
-
-    resnet = bb.get_backbone(arch="resnet18", n_frames=args.SEQ_LEN)
-    clip.unsqueeze_(0)
-    return resnet(clip)    
-
-train_transform = transforms.Compose([
-                    vtf.ResizeClip(IMAGE_HEIGHT, IMAGE_WIDTH),
-                    vtf.ToTensorStack(),
-                    vtf.Normalize(mean=args.MEANS, std=args.STDS)])
-
-
-if args.MODE in ['train','val']:
-    train_dataset = VideoDataset(args, transform=train_transform)
-    clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
-    print("clip loaded")
-    t1 = ActiveAgentDetection(args.SEQ_LEN)
-    t1.decode(encode(clip))
-    
-    
- 
-
-    # train_dataset.inputs_base()
-
-
-    # ## For validation set
-    # full_test = False
-    # args.SUBSETS = args.VAL_SUBSETS
-    # skip_step = args.SEQ_LEN*8
-
-else:
-    args.MAX_SEQ_STEP = 1
-    args.SUBSETS = args.TEST_SUBSETS
-    full_test = True #args.MODE != 'train'
-
-# validation set
-# val_dataset = VideoDataset(args, train=False, skip_step=skip_step)
-
-
-#print(train_dataset.__len__())
-#clip, all_boxes, labels, ego_labels, index, wh, num_classes = train_dataset.__getitem__(1)
-#print(clip)
+    def _get_train_transform(self):
+        train_transform = transforms.Compose([
+                            vtf.ResizeClip(IMAGE_HEIGHT, IMAGE_WIDTH),
+                            vtf.ToTensorStack(),
+                            vtf.Normalize(mean=self._mean, std=self._std)])
+        return train_transform
 
 
 

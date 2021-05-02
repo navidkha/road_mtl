@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 
-from basics import EfficientConvBlock
+from model.basics import EfficientConvBlock
 #from .unet import UNet
 
 
