@@ -1,6 +1,7 @@
 
 # import t
 
+
 class TaskInterface:
 
     def encode(self, mat):
