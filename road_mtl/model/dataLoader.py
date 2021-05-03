@@ -13,6 +13,7 @@ from tasks.resnet import ResNet
 from tasks.taskCreator import TaskCreator
 
 import model.transforms as vtf
+from utils.printUtility import print_warn
 
 IMAGE_HEIGHT = 224
 IMAGE_WIDTH = 224
@@ -64,10 +65,11 @@ class VideoDataset(tutils.data.Dataset):
 
         self._mean = args.MEANS
         self._std = args.STDS
-
+        self._is_debug_mode = args.DEBUG
         self.ids = list()  
         self._make_lists_road()
         self.transform = self._get_train_transform()
+
 
     def _make_lists_road(self):
 
@@ -101,12 +103,19 @@ class VideoDataset(tutils.data.Dataset):
             
             # if not is_part_of_subsets(final_annots['db'][videoname]['split_ids'], self.SUBSETS):
             #     continue
-            print(videoname)
-            if videoname in ["2014-06-25-16-45-34_stereo_centre_02","2014-08-08-13-15-11_stereo_centre_01",
+            # print(videoname)
+
+            dir_list = \
+                ["2014-06-25-16-45-34_stereo_centre_02","2014-08-08-13-15-11_stereo_centre_01",
             "2014-08-11-10-59-18_stereo_centre_02", "2014-11-21-16-07-03_stereo_centre_01",
             "2014-11-25-09-18-32_stereo_centre_04", "2014-12-09-13-21-02_stereo_centre_01",
             "2015-02-13-09-16-26_stereo_centre_02", "2015-02-13-09-16-26_stereo_centre_05",
-            "2015-02-24-12-32-19_stereo_centre_04", "2015-03-03-11-31-36_stereo_centre_01"]:
+            "2015-02-24-12-32-19_stereo_centre_04", "2015-03-03-11-31-36_stereo_centre_01"]
+
+            if self._is_debug_mode:
+                dir_list = ["2014-06-25-16-45-34_stereo_centre_02"]
+
+            if videoname in dir_list:
                 numf = database[videoname]['numf']
                 self.numf_list.append(numf)
                 self.video_list.append(videoname)
@@ -235,7 +244,7 @@ class VideoDataset(tutils.data.Dataset):
         height, width = clip.shape[-2:]
         wh = [height, width]
         clip = clip.view(3*self.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
-        print(clip.shape)
+        # print(clip.shape)
         return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
 
     def _get_train_transform(self):

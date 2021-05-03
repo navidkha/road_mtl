@@ -5,7 +5,7 @@ from tasksManager import TasksManager
 from utils import ioUtils as utils
 import argparse
 
-from utils.printUtility import print_info
+from utils.printUtility import print_info, print_warn
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Training')
@@ -23,7 +23,7 @@ if __name__ == "__main__":
                         help='MODE can be train, gen_dets, eval_frames, eval_tubes define SUBSETS accordingly, build tubes')
     parser.add_argument('--SEQ_LEN', default=4,
                         type=int, help='Number of input frames')
-    parser.add_argument('-b', '--BATCH_SIZE', default=4,
+    parser.add_argument('-b', '--BATCH_SIZE', default=1,
                         type=int, help='Batch size for training')
     parser.add_argument('--MIN_SEQ_STEP', default=1,
                         type=int, help='DIFFERENCE of gap between the frames of sequence')
@@ -33,9 +33,14 @@ if __name__ == "__main__":
                         type=int, help='Input Size for FPN')
     parser.add_argument('--NUM_WORKERS', default=4,
                         type=int, help='Number of threads')
+    parser.add_argument('--DEBUG', default=False,
+                        type=bool, help='Is debug mode')
 
     args = parser.parse_args()
     args = utils.set_args(args)  # set SUBSETS of datasets
+
+    if args.DEBUG:
+        print_warn("-------------- Running in DEBUG mode --------------")
 
     if args.MODE in ['train', 'val']:
         print_info("Loading dataset ...")

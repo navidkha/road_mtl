@@ -35,19 +35,19 @@ class TasksManager:
             encoded_vector = encoder.encode(images)
             for task in self._tasks_list:
                 task_output = task.decode(encoded_vector)
-                loss = self.criterion(out, y)
+                # loss = self.criterion(out, y)
 
             # store accuracy for task
-            task.set_acc_threshold(acc)
+            # task.set_acc_threshold(acc)
 
     def run(self):
         ln = len(self._data_loader)
         encoder = ResNet(self._seq_len)
 
-        for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(
-                self._data_loader):
+        for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self._data_loader):
             for i in range(len(self._tasks_list)):
                 primary_task = self._tasks_list[i]
+                sp = gt_boxes[0].shape
                 primary_task.set_primary()
                 for j in range(len(self._tasks_list)):
                     if not self._tasks_list[j].is_primary():
