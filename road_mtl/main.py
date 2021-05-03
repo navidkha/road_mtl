@@ -31,6 +31,8 @@ if __name__ == "__main__":
                         type=int, help='DIFFERENCE of gap between the frames of sequence')
     parser.add_argument('--MIN_SIZE', default=512,
                         type=int, help='Input Size for FPN')
+    parser.add_argument('--NUM_WORKERS', default=4,
+                        type=int, help='Number of threads')
 
     args = parser.parse_args()
     args = utils.set_args(args)  # set SUBSETS of datasets
