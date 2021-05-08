@@ -2,6 +2,8 @@ import gc
 from pathlib import Path
 from datetime import datetime
 import sys
+import torch.nn as nn
+
 try:
     sys.path.append(str(Path(".").resolve()))
 except:
@@ -44,7 +46,7 @@ class Learner:
             raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
 
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion = None
+        self.criterion = nn.CrossEntropyLoss()
 
         if self.cfg.logger.resume:
             # load checkpoint

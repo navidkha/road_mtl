@@ -1,16 +1,14 @@
 import model.backbone as backbone
 from utils.printUtility import print_info
+import torch.nn as nn
 
-
-class ResNet:
-    def __init__(self, seq_len):
+class ResNet(nn.Module):
+    def __init__(self, seq_len, pre_trained=False):
+        super(ResNet, self).__init__()
         self._resnet = None
         self._seq_len = seq_len
+        self._resnet = backbone.get_backbone(arch="resnet18", n_frames=self._seq_len, pretrained=pre_trained)
 
-    def encode(self, clip):
-        if self._resnet is None:
-            self._resnet = backbone.get_backbone(arch="resnet18", n_frames=self._seq_len)
-            print_info("ResNet18 created.")
+    def forward(self, clip):
 
-        clip.unsqueeze_(0)
         return self._resnet(clip)

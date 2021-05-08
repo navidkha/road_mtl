@@ -9,6 +9,11 @@ from torchvision import models
 from model.basics import EfficientConvBlock
 #from .unet import UNet
 
+def init_resnet(x):
+    if type(x) in [nn.Conv1d, nn.Conv2d]:
+        nn.init.kaiming_uniform_(x.weight)
+        
+
 
 def get_backbone(
     arch: str = "resnet18",
@@ -63,7 +68,12 @@ def _get_resnet(
     model.conv1 = EfficientConvBlock(
         in_ch=n_frames * n_classes, out_ch=model.conv1.out_channels, gamma=gamma, b=b
     )
+    with torch.no_grad():
 
+        model.conv1.layer1.apply(init_resnet)
+        model.conv1.layer2.apply(init_resnet)
+    # nn.init.xavier_normal_(model.conv1.layer1)
+    # nn.init.xavier_normal_(model.conv1.layer2)
     if model.fc.in_features != 512:
         model.fc = nn.Linear(model.fc.in_features, 512)
     else:

@@ -245,7 +245,10 @@ class VideoDataset(tutils.data.Dataset):
         wh = [height, width]
         clip = clip.view(3*self.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
         # print(clip.shape)
-        return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
+        if len(labels[0]) == 0:
+            print("_______________no label______________")
+        else:
+            return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
 
     def _get_train_transform(self):
         train_transform = transforms.Compose([
