@@ -4,9 +4,11 @@ import os
 from random import shuffle
 
 import numpy as np
+import torch
 import torch.utils as tutils
 import torch.utils.data as data_utils
 from PIL import Image
+from torch.utils.data._utils.collate import default_collate
 from torchvision import transforms
 
 from tasks.resnet import ResNet
@@ -244,7 +246,8 @@ class VideoDataset(tutils.data.Dataset):
         height, width = clip.shape[-2:]
         wh = [height, width]
         clip = clip.view(3*self.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
-        # print(clip.shape)
+        print(clip.shape)
+        
         return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
 
     def _get_train_transform(self):
@@ -253,6 +256,8 @@ class VideoDataset(tutils.data.Dataset):
                             vtf.ToTensorStack(),
                             vtf.Normalize(mean=self._mean, std=self._std)])
         return train_transform
+
+
 
 
 

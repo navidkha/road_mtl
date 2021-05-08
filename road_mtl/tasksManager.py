@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import DataLoader
 from tasks.resnet import ResNet
 from tasks.taskCreator import TaskCreator
@@ -13,8 +14,8 @@ class TasksManager:
         self._create_task_list()
 
     def _create_task_list(self):
-        self._tasks_list.append(TaskCreator.active_agent_detection())
         self._tasks_list.append(TaskCreator.action_detection())
+        self._tasks_list.append(TaskCreator.active_agent_detection())
         self._tasks_list.append(TaskCreator.location_detection())
         self._tasks_list.append(TaskCreator.in_agent_action_detection())
         self._tasks_list.append(TaskCreator.road_event_detection())
@@ -42,12 +43,25 @@ class TasksManager:
 
     def run(self):
         ln = len(self._data_loader)
-        encoder = ResNet(self._seq_len)
+        encoder = ResNet(self._seq_len).cuda()
+
 
         for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self._data_loader):
+            print("images size: " + str(len(images)) + ", shape: " + str(images[0].shape))
+
+            print('-----------------------------S')
+            print(gt_boxes[0])
+            print('-----------------------------')
+            print(gt_labels[0])
+            print('-----------------------------E')
+
             for i in range(len(self._tasks_list)):
                 primary_task = self._tasks_list[i]
-                sp = gt_boxes[0].shape
+
+                encoded_vect = encoder.encode(images[0])
+                decoded = primary_task.decode(encoded_vect)
+                print(decoded)
+
                 primary_task.set_primary()
                 for j in range(len(self._tasks_list)):
                     if not self._tasks_list[j].is_primary():

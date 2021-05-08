@@ -18,6 +18,9 @@ class VisionTask:
     def __repr__(self):
         print(self.task_name)
 
+    def __str__(self):
+        return self.task_name
+
     def get_name(self):
         return self.task_name
 

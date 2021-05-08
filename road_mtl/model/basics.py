@@ -34,6 +34,7 @@ def make_mlp(
                 layers.append(nn.BatchNorm1d(out_dim))
 
             layers.append(activation)
+            nn.init.constant
 
             if dropout > 0.0:
                 layers.append(nn.Dropout(p=dropout))

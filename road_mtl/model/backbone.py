@@ -64,6 +64,7 @@ def _get_resnet(
         in_ch=n_frames * n_classes, out_ch=model.conv1.out_channels, gamma=gamma, b=b
     )
 
+
     if model.fc.in_features != 512:
         model.fc = nn.Linear(model.fc.in_features, 512)
     else:
