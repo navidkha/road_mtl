@@ -1,7 +1,7 @@
 """Utils for nn module"""
 import numpy as np
 import torch.nn as nn
-from thop import profile, clever_format
+# from thop import profile, clever_format
 
 
 def check_grad_norm(net: nn.Module):
@@ -96,11 +96,11 @@ def init_weights_xavier_normal(m: nn.Module):
         nn.init.constant_(m.bias.data, 0)
 
 
-def op_counter(model, sample):
-    model.eval()
-    macs, params = profile(model, inputs=(sample,))
-    macs, params = clever_format([macs, params], "%.3f")
-    return macs, params
+# def op_counter(model, sample):
+#     model.eval()
+#     macs, params = profile(model, inputs=(sample,))
+#     macs, params = clever_format([macs, params], "%.3f")
+#     return macs, params
 
 
 class EarlyStopping:

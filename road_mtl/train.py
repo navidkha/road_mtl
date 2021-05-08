@@ -19,7 +19,7 @@ from torch.optim.swa_utils import AveragedModel, SWALR
 
 from model.net import CustomModel
 #from model.data_loader import CustomDataset, CustomDatasetVal
-from utils.nn import check_grad_norm, init_weights_normal, EarlyStopping, op_counter
+from utils.nn import check_grad_norm, init_weights_normal, EarlyStopping #, op_counter
 from utils.io import save_checkpoint, load_checkpoint
 from utils.utility import get_conf, timeit
 

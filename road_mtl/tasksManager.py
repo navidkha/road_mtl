@@ -1,11 +1,13 @@
-import torch
 from torch.utils.data import DataLoader
 from tasks.resnet import ResNet
 from tasks.taskCreator import TaskCreator
-import torch
-import numpy as np
-import torch.nn as nn
 from train import Learner
+from torch.utils.data import DataLoader
+
+from tasks.resnet import ResNet
+from tasks.taskCreator import TaskCreator
+from train import Learner
+
 
 def OneHotTOInt(label):
     for i in range(len(label)):
@@ -59,7 +61,7 @@ class TasksManager:
 
     def run(self):
         ln = len(self._data_loader)
-        encoder = ResNet(self._seq_len).cuda()
+        encoder = ResNet(self._seq_len)
 
 
         for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self._data_loader):
