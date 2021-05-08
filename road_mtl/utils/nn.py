@@ -16,36 +16,36 @@ def check_grad_norm(net: nn.Module):
     return total_norm
 
 
-def freeze(model: nn.Module, exclude: List, verbose: bool = False) -> nn.Module:
-    """Freezes the layers of the model except the exclusion layer list.
+# def freeze(model: nn.Module, exclude: List, verbose: bool = False) -> nn.Module:
+#     """Freezes the layers of the model except the exclusion layer list.
 
-    Args:
-        model: (nn.Module) The model itself.
-        exclude: (List) The list of layers name the you want to keep unfrozen.
-        verbose: (bool) Show statistics of the model parameters.
+#     Args:
+#         model: (nn.Module) The model itself.
+#         exclude: (List) The list of layers name the you want to keep unfrozen.
+#         verbose: (bool) Show statistics of the model parameters.
 
-    Returns:
-        model: (nn.Module) returns the frozen model.
-    """
-    frozen_layers_list = []
-    frozen_params_list = [len(p) for p in model.parameters() if p.requires_grad]
-    if verbose:
-        print(f"The model has {len([p for p in model.parameters()])} layers.")
-        print(f"Before freezing the model had {sum(frozen_params_list)} parameters.")
+#     Returns:
+#         model: (nn.Module) returns the frozen model.
+#     """
+#     frozen_layers_list = []
+#     frozen_params_list = [len(p) for p in model.parameters() if p.requires_grad]
+#     if verbose:
+#         print(f"The model has {len([p for p in model.parameters()])} layers.")
+#         print(f"Before freezing the model had {sum(frozen_params_list)} parameters.")
 
-    for name, child in model.named_parameters():
-        if not any(layer in name for layer in exclude):
-            frozen_layers_list.append(name)
-            child.requires_grad_(False)
+#     for name, child in model.named_parameters():
+#         if not any(layer in name for layer in exclude):
+#             frozen_layers_list.append(name)
+#             child.requires_grad_(False)
 
-    frozen_params_list = [len(p) for p in model.parameters() if p.requires_grad]
-    if verbose:
-        print(f"{len(frozen_layers_list)} layers have been frozen.")
-        print(f"After freezing the model has {sum(frozen_params_list)} parameters.")
+#     frozen_params_list = [len(p) for p in model.parameters() if p.requires_grad]
+#     if verbose:
+#         print(f"{len(frozen_layers_list)} layers have been frozen.")
+#         print(f"After freezing the model has {sum(frozen_params_list)} parameters.")
 
-    return model
+#     return model
 
-
+    
 def init_weights_normal(m: nn.Module, mean: float = 0.0, std: float = 0.5):
     """Initialize the network's weights based on normal distribution
 

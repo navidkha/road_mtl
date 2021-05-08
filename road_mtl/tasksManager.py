@@ -2,6 +2,15 @@ import torch
 from torch.utils.data import DataLoader
 from tasks.resnet import ResNet
 from tasks.taskCreator import TaskCreator
+import torch
+import numpy as np
+import torch.nn as nn
+from train import Learner
+
+def OneHotTOInt(label):
+    for i in range(len(label)):
+        if(label[i]==1):
+            return i
 
 
 class TasksManager:
@@ -29,17 +38,24 @@ class TasksManager:
 
     def run_tasks_single(self, task_name):
         ln = len(self._data_loader)
-        encoder = ResNet(self._seq_len)
+        encoder = ResNet(self._seq_len, pre_trained = True)
 
-        for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(
-                self._data_loader):
-            encoded_vector = encoder.encode(images)
-            for task in self._tasks_list:
-                task_output = task.decode(encoded_vector)
-                # loss = self.criterion(out, y)
+        task = self._tasks_list[0]
+        cfg_path = "./conf/config"
+        learner = Learner(cfg_path, self._data_loader, encoder)
+        learner.train(task)
 
-            # store accuracy for task
-            # task.set_acc_threshold(acc)
+        # optimizer = torch.optim.SGD(encoder.parameters(), lr=learning_rate)
+        # m = nn.Sigmoid()
+        # criterion = nn.BCELoss()
+        # label = gt_labels[0][0][0][1:11]
+        # print(label)
+        # task_output = task.decode(encoded_vector)
+        # print(task_output[0])
+        # loss = criterion(m(task_output[0]), label)
+        # print("loss:")
+        # print(loss)
+
 
     def run(self):
         ln = len(self._data_loader)

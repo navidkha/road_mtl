@@ -58,7 +58,7 @@ if __name__ == "__main__":
                                  drop_last=True)
 
         tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN)
-        tasks_manager.run()
+        tasks_manager.run_tasks_single("ActiveAgentDetection")
 
     else:
         args.MAX_SEQ_STEP = 1

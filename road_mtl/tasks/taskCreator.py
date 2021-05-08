@@ -14,7 +14,7 @@ class TaskCreator:
     @staticmethod
     def active_agent_detection():
         return VisionTask(task_name=VisionTaskName.ActiveAgentDetection.value,
-                        decode_dims=[512, 11], activation_function="relu")
+                        decode_dims=[512, 10], activation_function="relu")
 
     @staticmethod
     def in_agent_action_detection():
