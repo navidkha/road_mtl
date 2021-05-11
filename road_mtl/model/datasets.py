@@ -548,13 +548,14 @@ def custum_collate(batch):
     whs = []
 
     for sample in batch:
-        images.append(sample[0])
-        boxes.append(sample[1])
-        targets.append(sample[2])
-        ego_targets.append(torch.LongTensor(sample[3]))
-        image_ids.append(sample[4])
-        whs.append(torch.LongTensor(sample[5]))
-        num_classes = sample[6]
+        if sample != None:
+            images.append(sample[0])
+            boxes.append(sample[1])
+            targets.append(sample[2])
+            ego_targets.append(torch.LongTensor(sample[3]))
+            image_ids.append(sample[4])
+            whs.append(torch.LongTensor(sample[5]))
+            num_classes = sample[6]
 
     counts = []
     max_len = -1

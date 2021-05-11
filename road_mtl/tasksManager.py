@@ -25,22 +25,23 @@ class TasksManager:
         self._create_task_list()
 
     def _create_task_list(self):
-        self._tasks_list.append(TaskCreator.action_detection())
         self._tasks_list.append(TaskCreator.active_agent_detection())
+        self._tasks_list.append(TaskCreator.action_detection())
         self._tasks_list.append(TaskCreator.location_detection())
         self._tasks_list.append(TaskCreator.in_agent_action_detection())
         self._tasks_list.append(TaskCreator.road_event_detection())
-        self._tasks_list.append(TaskCreator.av_temporal_action_segmentation())
-        self._tasks_list.append(TaskCreator.complex_road_activities_detection())
-        self._tasks_list.append(TaskCreator.event_intent_prediction())
-        self._tasks_list.append(TaskCreator.autonomous_decision_making())
-        self._tasks_list.append(TaskCreator.machine_theory_of_mind())
-        self._tasks_list.append(TaskCreator.continual_event_detection())
+        # self._tasks_list.append(TaskCreator.av_temporal_action_segmentation())
+        # self._tasks_list.append(TaskCreator.complex_road_activities_detection())
+        # self._tasks_list.append(TaskCreator.event_intent_prediction())
+        # self._tasks_list.append(TaskCreator.autonomous_decision_making())
+        # self._tasks_list.append(TaskCreator.machine_theory_of_mind())
+        # self._tasks_list.append(TaskCreator.continual_event_detection())
 
 
     def run_tasks_single(self, task_name):
         ln = len(self._data_loader)
         encoder = ResNet(self._seq_len, pre_trained = True)
+
 
         task = self._tasks_list[0]
         cfg_path = "./conf/config"

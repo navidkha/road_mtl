@@ -4,6 +4,8 @@ from datetime import datetime
 import sys
 import torch.nn as nn
 
+from tasks.visionTask import VisionTask
+
 try:
     sys.path.append(str(Path(".").resolve()))
 except:
@@ -80,7 +82,7 @@ class Learner:
         self.swa_model = AveragedModel(self.model)
         self.swa_scheduler = SWALR(self.optimizer, **self.cfg.SWA)
 
-    def train(self, task):
+    def train(self, task:VisionTask):
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
@@ -90,7 +92,7 @@ class Learner:
                 # move data to device
 
                 m = nn.Sigmoid()
-                y = gt_labels[0][0][0][1:11]
+                y = gt_labels[0][0][0][task.boundary[0]:task.boundary[1]]
                 x = images
 
 

@@ -1,4 +1,5 @@
 from model.basics import make_mlp
+from tasks.taskNames import VisionTaskName
 from utils.printUtility import *
 
 
@@ -9,6 +10,19 @@ class VisionTask:
         self.decode_dims = decode_dims
         self.decode_activation_function = activation_function
         self._is_primary_task = False
+
+        self.boundary = []
+        if self.task_name == VisionTaskName.ActiveAgentDetection:
+            self.boundary = [1, 11]
+        elif self.task_name == VisionTaskName.ActionDetection:
+            self.boundary = [11, 30]
+        elif self.task_name == VisionTaskName.LocationDetection:
+            self.boundary = [30, 42]
+        elif self.task_name == VisionTaskName.InAgentActionDetection:
+            self.boundary = [42, 81]
+        elif self.task_name == VisionTaskName.RoadEventDetection:
+            self.boundary = [81, 149]
+
 
         # stores accuracy of task when it trained as single task.
         self._acc_threshold = 0
