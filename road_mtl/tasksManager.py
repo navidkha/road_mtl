@@ -1,8 +1,4 @@
 from torch.utils.data import DataLoader
-from tasks.resnet import ResNet
-from tasks.taskCreator import TaskCreator
-from train import Learner
-from torch.utils.data import DataLoader
 
 from tasks.resnet import ResNet
 from tasks.taskCreator import TaskCreator
@@ -39,31 +35,18 @@ class TasksManager:
 
 
     def run_tasks_single(self, task_name):
-        ln = len(self._data_loader)
         encoder = ResNet(self._seq_len, pre_trained = True)
-
-
-        task = self._tasks_list[0]
         cfg_path = "./conf/config"
-        learner = Learner(cfg_path, self._data_loader, encoder)
-        learner.train(task)
-
-        # optimizer = torch.optim.SGD(encoder.parameters(), lr=learning_rate)
-        # m = nn.Sigmoid()
-        # criterion = nn.BCELoss()
-        # label = gt_labels[0][0][0][1:11]
-        # print(label)
-        # task_output = task.decode(encoded_vector)
-        # print(task_output[0])
-        # loss = criterion(m(task_output[0]), label)
-        # print("loss:")
-        # print(loss)
+        for i in range(len(self._tasks_list)):
+            task = self._tasks_list[i]
+            learner = Learner(cfg_path, self._data_loader, encoder)
+            acc =  learner.train(task)
+            task.set_acc_threshold(acc)
 
 
-    def run(self):
+    def run_multi_tasks(self):
         ln = len(self._data_loader)
         encoder = ResNet(self._seq_len)
-
 
         for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self._data_loader):
             print("images size: " + str(len(images)) + ", shape: " + str(images[0].shape))

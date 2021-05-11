@@ -11,16 +11,15 @@ class VisionTask:
         self.decode_activation_function = activation_function
         self._is_primary_task = False
 
-        self.boundary = []
-        if self.task_name == VisionTaskName.ActiveAgentDetection:
+        if self.task_name == VisionTaskName.ActiveAgentDetection.value:
             self.boundary = [1, 11]
-        elif self.task_name == VisionTaskName.ActionDetection:
+        elif self.task_name == VisionTaskName.ActionDetection.value:
             self.boundary = [11, 30]
-        elif self.task_name == VisionTaskName.LocationDetection:
+        elif self.task_name == VisionTaskName.LocationDetection.value:
             self.boundary = [30, 42]
-        elif self.task_name == VisionTaskName.InAgentActionDetection:
+        elif self.task_name == VisionTaskName.InAgentActionDetection.value:
             self.boundary = [42, 81]
-        elif self.task_name == VisionTaskName.RoadEventDetection:
+        elif self.task_name == VisionTaskName.RoadEventDetection.value:
             self.boundary = [81, 149]
 
 

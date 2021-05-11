@@ -174,6 +174,7 @@ class Learner:
         print(macs, params)
         #self.logger.log_metrics({"GFLOPS": macs[:-1], "#Params": params[:-1]})
         print("Training Finished!")
+        return loss
 
     @timeit
     @torch.no_grad()

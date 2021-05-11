@@ -59,6 +59,7 @@ if __name__ == "__main__":
 
         tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN)
         tasks_manager.run_tasks_single("ActiveAgentDetection")
+        tasks_manager.run_multi_tasks()
 
     else:
         args.MAX_SEQ_STEP = 1
