@@ -43,6 +43,11 @@ class VisionTask:
 
     def set_acc_threshold(self, acc):
         self._acc_threshold = acc
+        #TODO store on file
+        stat =  self.task_name + ": " + str(acc)
+        print_magenta(stat)
+        #logger.info(stat)
+
 
     def set_primary(self):
         self._is_primary_task = True
