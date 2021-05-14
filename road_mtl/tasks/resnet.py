@@ -7,7 +7,7 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self._resnet = None
         self._seq_len = seq_len
-        self._resnet = backbone.get_backbone(arch="resnet18", n_frames=self._seq_len, pretrained=pre_trained)
+        self._resnet = backbone.get_backbone(arch="resnet50", n_frames=self._seq_len, pretrained=pre_trained)
 
     def forward(self, clip):
 

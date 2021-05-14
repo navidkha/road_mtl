@@ -74,10 +74,10 @@ def _get_resnet(
         model.conv1.layer2.apply(init_resnet)
     # nn.init.xavier_normal_(model.conv1.layer1)
     # nn.init.xavier_normal_(model.conv1.layer2)
-    if model.fc.in_features != 512:
-        model.fc = nn.Linear(model.fc.in_features, 512)
-    else:
-        model.fc = nn.Identity()
+    # if model.fc.in_features != 512:
+    #     model.fc = nn.Linear(model.fc.in_features, 512)
+    # else:
+    model.fc = nn.Identity()
 
     return model
 

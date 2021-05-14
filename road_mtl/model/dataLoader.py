@@ -139,7 +139,7 @@ class VideoDataset(tutils.data.Dataset):
                         
                         all_boxes = []
                         all_labels = []
-                        frame_annos = frame['annos']
+                        frame_annos = frame['annos']                    
                         for key in frame_annos:
                             width, height = frame['width'], frame['height']
                             anno = frame_annos[key]
@@ -163,7 +163,6 @@ class VideoDataset(tutils.data.Dataset):
                                     box_labels[fid+cc] = 1
                                     box_labels[0] = 1
                                 cc += self.num_classes_list[idx+1]
-
                             all_labels.append(box_labels)
 
                             # for box_labels in all_labels:
@@ -245,10 +244,7 @@ class VideoDataset(tutils.data.Dataset):
         wh = [height, width]
         clip = clip.view(3*self.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
         # print(clip.shape)
-        if len(labels[0]) == 0:
-            print("_______________no label______________")
-        else:
-            return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
+        return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
 
     def _get_train_transform(self):
         train_transform = transforms.Compose([
