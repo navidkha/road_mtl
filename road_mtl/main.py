@@ -26,7 +26,7 @@ if __name__ == "__main__":
                         help='MODE can be train, gen_dets, eval_frames, eval_tubes define SUBSETS accordingly, build tubes')
     parser.add_argument('--SEQ_LEN', default=8,
                         type=int, help='Number of input frames')
-    parser.add_argument('-b', '--BATCH_SIZE', default=4,
+    parser.add_argument('-b', '--BATCH_SIZE', default=8,
                         type=int, help='Batch size for training')
     parser.add_argument('--MIN_SEQ_STEP', default=1,
                         type=int, help='DIFFERENCE of gap between the frames of sequence')

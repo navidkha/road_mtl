@@ -11,7 +11,7 @@ try:
 except:
     raise RuntimeError("Can't append root directory of the project the path")
 
-#import comet_ml
+import comet_ml
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -87,7 +87,7 @@ class Learner:
             running_loss = []
             self.model.train()
 
-            for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
+            for internel_iter, (images, gt_boxes, gt_labels, ego_labels, img_indexs, wh,counts) in enumerate(self.data):
                 self.optimizer.zero_grad()
                 # move data to device
 
@@ -102,7 +102,7 @@ class Learner:
                 # forward, backward
                 encoded_vector = self.model(x)
                 out = task.decode(encoded_vector)
-                loss = self.criterion(m(out[0]), y)
+                loss = self.criterion(m(out), y)
                 loss.backward()
                 # check grad norm for debugging
                 grad_norm = check_grad_norm(self.model)

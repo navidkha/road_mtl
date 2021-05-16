@@ -40,7 +40,7 @@ class TasksManager:
         for i in range(len(self._tasks_list)):
             task = self._tasks_list[i]
             learner = Learner(cfg_path, self._data_loader, encoder)
-            acc =  learner.train(task)
+            acc = learner.train(task)
             task.set_acc_threshold(acc)
 
 

@@ -105,17 +105,12 @@ class VideoDataset(tutils.data.Dataset):
             #     continue
             # print(videoname)
 
-            dir_list = \
-                ["2014-06-25-16-45-34_stereo_centre_02","2014-08-08-13-15-11_stereo_centre_01",
-            "2014-08-11-10-59-18_stereo_centre_02", "2014-11-21-16-07-03_stereo_centre_01",
-            "2014-11-25-09-18-32_stereo_centre_04", "2014-12-09-13-21-02_stereo_centre_01",
-            "2015-02-13-09-16-26_stereo_centre_02", "2015-02-13-09-16-26_stereo_centre_05",
-            "2015-02-24-12-32-19_stereo_centre_04", "2015-03-03-11-31-36_stereo_centre_01"]
+            dir_list = []
 
-            if self._is_debug_mode:
+            if self._is_debug_mode == True:
                 dir_list = ["2014-06-25-16-45-34_stereo_centre_02"]
 
-            if videoname in dir_list:
+            if self._is_debug_mode == False or (self._is_debug_mode == True and videoname in dir_list):
                 numf = database[videoname]['numf']
                 self.numf_list.append(numf)
                 self.video_list.append(videoname)
@@ -213,42 +208,50 @@ class VideoDataset(tutils.data.Dataset):
         return len(self.ids)
 
     def __getitem__(self, index):
-        id_info = self.ids[index]
-        video_id, start_frame, step_size = id_info
-        videoname = self.video_list[video_id]
-        images = []
-        frame_num = start_frame
-        ego_labels = np.zeros(self.SEQ_LEN)-1
-        all_boxes = []
-        labels = []
-        ego_labels = []
-        mask = np.zeros(self.SEQ_LEN, dtype=np.int)
-        # indexs = []
-        for i in range(self.SEQ_LEN):
-            img_name = self._imgpath + '/{:s}/{:05d}.jpg'.format(videoname, frame_num+1)
+        data_ok = False
+        while data_ok == False:
+            id_info = self.ids[index]
+            video_id, start_frame, step_size = id_info
+            videoname = self.video_list[video_id]
+            images = []
+            frame_num = start_frame
+            ego_labels = np.zeros(self.SEQ_LEN)-1
+            all_boxes = []
+            labels = []
+            ego_labels = []
+            mask = np.zeros(self.SEQ_LEN, dtype=np.int)
+            # indexs = []
 
-            img = Image.open(img_name).convert('RGB')
-            images.append(img)
-            if self.frame_level_list[video_id][frame_num]['labeled']:
-                mask[i] = 1
-                all_boxes.append(self.frame_level_list[video_id][frame_num]['boxes'].copy())
-                labels.append(self.frame_level_list[video_id][frame_num]['labels'].copy())
-                ego_labels.append(self.frame_level_list[video_id][frame_num]['ego_label'])
+            for i in range(self.SEQ_LEN):
+                img_name = self._imgpath + '/{:s}/{:05d}.jpg'.format(videoname, frame_num+1)
+
+                img = Image.open(img_name).convert('RGB')
+                images.append(img)
+                if self.frame_level_list[video_id][frame_num]['labeled']:
+                    mask[i] = 1
+                    all_boxes.append(self.frame_level_list[video_id][frame_num]['boxes'].copy())
+                    labels.append(self.frame_level_list[video_id][frame_num]['labels'].copy())
+                    ego_labels.append(self.frame_level_list[video_id][frame_num]['ego_label'])
+                else:
+                    all_boxes.append(np.asarray([]))
+                    labels.append(np.asarray([]))
+                    ego_labels.append(-1)
+                frame_num += step_size
+
+            clip = self.transform(images)
+            height, width = clip.shape[-2:]
+            wh = [height, width]
+            clip = clip.view(3*self.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
+            # print(clip.shape)
+            if len(labels[0]) == 0:
+                # print("_______________no label______________")
+                data_ok = False
+                index += 1
             else:
-                all_boxes.append(np.asarray([]))
-                labels.append(np.asarray([]))
-                ego_labels.append(-1)            
-            frame_num += step_size
+                # data_ok = True
+                return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
 
-        clip = self.transform(images)
-        height, width = clip.shape[-2:]
-        wh = [height, width]
-        clip = clip.view(3*self.SEQ_LEN,IMAGE_HEIGHT,IMAGE_WIDTH)
-        # print(clip.shape)
-        if len(labels[0]) == 0:
-            print("_______________no label______________")
-        else:
-            return clip, all_boxes, labels, ego_labels, index, wh, self.num_classes
+
 
     def _get_train_transform(self):
         train_transform = transforms.Compose([
