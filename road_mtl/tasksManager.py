@@ -37,8 +37,7 @@ class TasksManager:
     def run_tasks_single(self, task_name):
         encoder = ResNet(self._seq_len, pre_trained = True)
         cfg_path = "./conf/config"
-        for i in range(len(self._tasks_list)):
-            task = self._tasks_list[i]
+        for task in self._tasks_list:
             learner = Learner(cfg_path, self._data_loader, encoder)
             acc =  learner.train(task)
             task.set_acc_threshold(acc)
