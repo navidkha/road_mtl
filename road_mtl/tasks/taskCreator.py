@@ -9,7 +9,7 @@ class TaskCreator:
     @staticmethod
     def action_detection():
         return VisionTask(task_name=VisionTaskName.ActionDetection.value,
-                        decode_dims=[2048, 512, 23], activation_function="relu")
+                        decode_dims=[2048, 512, 19], activation_function="relu")
 
     @staticmethod
     def active_agent_detection():
@@ -19,17 +19,17 @@ class TaskCreator:
     @staticmethod
     def in_agent_action_detection():
         return VisionTask(task_name=VisionTaskName.InAgentActionDetection.value,
-                        decode_dims=[2048, 512, 0], activation_function="relu")
+                        decode_dims=[2048, 512, 39], activation_function="relu")
 
     @staticmethod
     def location_detection():
         return VisionTask(task_name=VisionTaskName.LocationDetection.value,
-                        decode_dims=[2048, 512, 15], activation_function="relu")
+                        decode_dims=[2048, 512, 12], activation_function="relu")
 
     @staticmethod
     def road_event_detection():
         return VisionTask(task_name=VisionTaskName.RoadEventDetection.value,
-                        decode_dims=[2048, 512, 0], activation_function="relu")
+                        decode_dims=[2048, 512, 68], activation_function="relu")
 
     # @staticmethod
     # def av_temporal_action_segmentation():
