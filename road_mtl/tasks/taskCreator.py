@@ -31,11 +31,11 @@ class TaskCreator:
         return VisionTask(task_name=VisionTaskName.RoadEventDetection.value,
                         decode_dims=[2048, 512, 0], activation_function="relu")
 
-    @staticmethod
-    def av_temporal_action_segmentation():
-        return VisionTask(task_name=VisionTaskName.AVTemporalActionSegmentation.value,
-                        decode_dims=[512, 7], activation_function="relu")
-                        # decode_dims=[1024,512, 7], activation_function="relu")
+    # @staticmethod
+    # def av_temporal_action_segmentation():
+    #     return VisionTask(task_name=VisionTaskName.AVTemporalActionSegmentation.value,
+    #                     decode_dims=[512, 7], activation_function="relu")
+    #                     # decode_dims=[1024,512, 7], activation_function="relu")
 
     # @staticmethod
     # def complex_road_activities_detection():
