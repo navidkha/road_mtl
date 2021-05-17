@@ -90,8 +90,11 @@ class Learner:
             for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
                 self.optimizer.zero_grad()
 
+                # fl = task.get_flat_label(gt_labels)
+
                 m = nn.Sigmoid()
-                y = gt_labels[0][-1][0][task.boundary[0]:task.boundary[1]]
+                y = gt_labels[:][-1][0][task.boundary[0]:task.boundary[1]]
+                print(y)
                 x = images
 
 

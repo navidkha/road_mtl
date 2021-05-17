@@ -1,6 +1,7 @@
 from model.basics import make_mlp
 from tasks.taskNames import VisionTaskName
 from utils.printUtility import *
+import numpy as np
 
 
 class VisionTask:
@@ -57,3 +58,28 @@ class VisionTask:
 
     def is_primary(self):
         return self._is_primary_task
+
+    def get_flat_label(self, labels):
+        # labels dhape is [batch_size, seq_len, box_count, long_label] e.g [4,8,13,149]
+        batch_size = len(labels)
+        flat_labels = arr = [0] * batch_size
+        for i in range(batch_size):
+            flat_label = []
+            box_count = len(labels[i][-1])
+            for j in range(box_count):
+                l = labels[i][-1][j] # len(l) = 149
+                l = l[self.boundary[0]:self.boundary[1]]
+                l = l.numpy().tolist()
+                if np.any(l):
+                    flat_label.append(1)
+                else:
+                    flat_label.append(0)
+
+                for k in range(len(l)):
+                    flat_label.append(l[k])
+            flat_labels[i] = flat_label
+
+        return flat_labels
+
+
+
