@@ -49,7 +49,7 @@ class VisionTask:
         mlp = make_mlp(self.decode_dims, self.decode_activation_function)
         return mlp(encoded_vec)
 
-    def set_acc_threshold(self, acc):
+    def set_acc_threshold(self, acc, logger):
         self._acc_threshold = acc
         #TODO store on file
         stat =  self.task_name + ": " + str(acc)
@@ -90,7 +90,6 @@ class VisionTask:
             for k in range (self._output_max_size - len(flat_label)):
                 flat_label = torch.cat((flat_label, zero_tensor))
 
-            print("len(flat_label): " +  str(len(flat_label)))
             flat_labels[i] = flat_label
 
         return flat_labels

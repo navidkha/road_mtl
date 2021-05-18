@@ -1,3 +1,4 @@
+import comet_ml
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data._utils.collate import default_collate
