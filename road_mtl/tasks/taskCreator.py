@@ -7,14 +7,14 @@ class TaskCreator:
     # TODO set appropriate activation function and decoder dims for all tasks
 
     @staticmethod
-    def action_detection():
-        return VisionTask(task_name=VisionTaskName.ActionDetection.value,
-                        decode_dims=[2048, 512, 19], activation_function="relu")
-
-    @staticmethod
     def active_agent_detection():
         return VisionTask(task_name=VisionTaskName.ActiveAgentDetection.value,
                         decode_dims=[2048, 512, 10], activation_function="relu")
+
+    @staticmethod
+    def action_detection():
+        return VisionTask(task_name=VisionTaskName.ActionDetection.value,
+                        decode_dims=[2048, 512, 19], activation_function="relu")
 
     @staticmethod
     def in_agent_action_detection():

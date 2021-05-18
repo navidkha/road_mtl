@@ -2,11 +2,15 @@ from model.basics import make_mlp
 from tasks.taskNames import VisionTaskName
 from utils.printUtility import *
 import numpy as np
+import torch
 
 
 class VisionTask:
 
     def __init__(self, task_name, decode_dims, activation_function):
+
+        self._max_box_count = 20
+
         self.task_name = task_name
         self.decode_dims = decode_dims
         self.decode_activation_function = activation_function
@@ -23,6 +27,9 @@ class VisionTask:
         elif self.task_name == VisionTaskName.RoadEventDetection.value:
             self.boundary = [81, 149]
 
+        # update decode dims last part to output_max_size instead of it's real value.
+        self._output_max_size = (self.boundary[1] - self.boundary[0] + 1) * self._max_box_count  
+        self.decode_dims[-1] = self._output_max_size 
 
         # stores accuracy of task when it trained as single task.
         self._acc_threshold = 0
@@ -61,25 +68,35 @@ class VisionTask:
 
     def get_flat_label(self, labels):
         # labels dhape is [batch_size, seq_len, box_count, long_label] e.g [4,8,13,149]
+
+        zero_tensor = torch.tensor([0])
+        one_tensor = torch.tensor([1])
+
         batch_size = len(labels)
-        flat_labels = arr = [0] * batch_size
+        flat_labels = torch.zeros(batch_size, self._output_max_size)
         for i in range(batch_size):
-            flat_label = []
+            flat_label = torch.empty(0)
             box_count = len(labels[i][-1])
             for j in range(box_count):
                 l = labels[i][-1][j] # len(l) = 149
                 l = l[self.boundary[0]:self.boundary[1]]
-                l = l.numpy().tolist()
-                if np.any(l):
-                    flat_label.append(1)
+                if torch.count_nonzero(l) > 0:
+                    flat_label = torch.cat((flat_label, one_tensor))
                 else:
-                    flat_label.append(0)
+                    flat_label = torch.cat((flat_label, zero_tensor))
 
-                for k in range(len(l)):
-                    flat_label.append(l[k])
+                flat_label = torch.cat((flat_label, l))
+        
+            for k in range (self._output_max_size - len(flat_label)):
+                flat_label = torch.cat((flat_label, zero_tensor))
+
+            print("len(flat_label): " +  str(len(flat_label)))
             flat_labels[i] = flat_label
 
         return flat_labels
+
+
+
 
 
 

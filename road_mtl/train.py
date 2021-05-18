@@ -93,8 +93,8 @@ class Learner:
                 # fl = task.get_flat_label(gt_labels)
 
                 m = nn.Sigmoid()
-                y = gt_labels[:][-1][0][task.boundary[0]:task.boundary[1]]
-                print(y)
+                y = task.get_flat_label(gt_labels)
+                # print(y)
                 x = images
 
 
@@ -105,7 +105,7 @@ class Learner:
                 # forward, backward
                 encoded_vector = self.model(x)
                 out = task.decode(encoded_vector)
-                loss = self.criterion(m(out[-1]), y)
+                loss = self.criterion(m(out), y)
                 loss.backward()
                 # check grad norm for debugging
                 grad_norm = check_grad_norm(self.model)
