@@ -84,6 +84,7 @@ class Learner:
         self.swa_scheduler = SWALR(self.optimizer, **self.cfg.SWA)
 
     def train(self, task:VisionTask):
+        task.go_to_gpu(self.device)
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
@@ -114,16 +115,17 @@ class Learner:
 
                 running_loss.append(loss.item())
 
-                print("Loss:", loss.item())
-                print("grad_norm", grad_norm)
+                #print("Loss:", loss.item())
+                #print("grad_norm", grad_norm)
 
                 self.logger.log_metrics(
                     {
-                    "epoch": self.epoch,
+                    #"epoch": self.epoch,
                     "batch": internel_iter,
                     "loss": loss.item(),
                     "GradNorm": grad_norm,
-                    }
+                    },
+                    epoch=self.epoch
                 )
 
             #bar.close()
@@ -164,16 +166,17 @@ class Learner:
                 self.save()
 
             gc.collect()
+            print("Task: " + task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
             self.epoch += 1
 
         # Update bn statistics for the swa_model at the end
-        if self.epoch >= self.cfg.train_params.swa_start:
-            torch.optim.swa_utils.update_bn(self.data, self.swa_model)
-            self.save(name=self.cfg.directory.model_name + "-final" + str(self.epoch) + "-swa")
+        #if self.epoch >= self.cfg.train_params.swa_start:
+#            torch.optim.swa_utils.update_bn(self.data.to(self.device), self.swa_model)
+            #self.save(name=self.cfg.directory.model_name + "-final" + str(self.epoch) + "-swa")
 
-        macs, params = op_counter(self.model, sample=x)
-        print(macs, params)
-        self.logger.log_metrics({"GFLOPS": macs[:-1], "#Params": params[:-1], "task name": task.get_name(), "total_loss": self.e_loss[-1]})
+        #macs, params = op_counter(self.model, sample=x)
+        #print(macs, params)
+        #self.logger.log_metrics({"GFLOPS": macs[:-1], "#Params": params[:-1], "task name": task.get_name(), "total_loss": self.e_loss[-1]})
         print("Training Finished!")
         return loss
 
