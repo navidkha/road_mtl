@@ -1,3 +1,4 @@
+import comet_ml
 import gc
 from pathlib import Path
 from datetime import datetime
@@ -11,7 +12,6 @@ try:
 except:
     raise RuntimeError("Can't append root directory of the project the path")
 
-import comet_ml
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -21,7 +21,7 @@ from torch.optim.swa_utils import AveragedModel, SWALR
 
 from model.net import CustomModel
 #from model.data_loader import CustomDataset, CustomDatasetVal
-from utils.nn import check_grad_norm, init_weights_normal, EarlyStopping #, op_counter
+from utils.nn import check_grad_norm, init_weights_normal, EarlyStopping, op_counter
 from utils.io import save_checkpoint, load_checkpoint
 from utils.utility import get_conf, timeit
 
@@ -29,7 +29,8 @@ from utils.utility import get_conf, timeit
 class Learner:
     def __init__(self, cfg_dir: str, data_loader, model):
         self.cfg = get_conf(cfg_dir)
-        self.logger = self.init_logger(self.cfg.logger)
+        #TODO
+        self.logger = self.init_logger(self.cfg.logger)[0]
         #self.dataset = CustomDataset(**self.cfg.dataset)
         self.data = data_loader
         #self.val_dataset = CustomDatasetVal(**self.cfg.val_dataset)
@@ -83,6 +84,7 @@ class Learner:
         self.swa_scheduler = SWALR(self.optimizer, **self.cfg.SWA)
 
     def train(self, task:VisionTask):
+        task.go_to_gpu(self.device)
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
@@ -94,7 +96,6 @@ class Learner:
 
                 m = nn.Sigmoid()
                 y = task.get_flat_label(gt_labels)
-                # print(y)
                 x = images
 
 
@@ -114,69 +115,68 @@ class Learner:
 
                 running_loss.append(loss.item())
 
-                print("Loss:", loss.item())
-                print("grad_norm", grad_norm)
-
-                # self.logger.log_metrics(
-                #     {
-                #     "epoch": self.epoch,
-                #     "batch": idx,
-                #     "loss": loss.item(),
-                #     "GradNorm": grad_norm,
-                #     }
-                # )
-
-                #bar.close()
-                if self.epoch > self.cfg.train_params.swa_start:
-                    self.swa_model.update_parameters(self.model)
-                    self.swa_scheduler.step()
-                else:
-                    self.lr_scheduler.step()
-
-                # validate on val set
-                # val_loss, t = self.validate()
-                # t /= len(self.val_dataset)
-
-                # average loss for an epoch
-                self.e_loss.append(np.mean(running_loss))  # epoch loss
-                # print(
-                #     f"{datetime.now():%Y-%m-%d %H:%M:%S} Epoch {self.epoch} summary: train Loss: {self.e_loss[-1]:.2f} \t| Val loss: {val_loss:.2f}"
-                #     f"\t| time: {t:.3f} seconds"
-                # )
+                #print("Loss:", loss.item())
+                #print("grad_norm", grad_norm)
 
                 self.logger.log_metrics(
                     {
-                        # "epoch": self.epoch,
-                        "epoch_loss": self.e_loss[-1],
-                        "val_loss": val_loss,
-                        "time": t,
+                    #"epoch": self.epoch,
+                    "batch": internel_iter,
+                    "loss": loss.item(),
+                    "GradNorm": grad_norm,
                     },
                     epoch=self.epoch
                 )
 
-                # early_stopping needs the validation loss to check if it has decreased,
-                # and if it has, it will make a checkpoint of the current model
-                #self.early_stopping(val_loss, self.model)
+            #bar.close()
+            if self.epoch > self.cfg.train_params.swa_start:
+                self.swa_model.update_parameters(self.model)
+                self.swa_scheduler.step()
+            else:
+                self.lr_scheduler.step()
 
-                if self.early_stopping.early_stop:
-                    print("Early stopping")
-                    self.save()
-                    break
+            # validate on val set
+            # val_loss, t = self.validate()
+            # t /= len(self.val_dataset)
 
-                if self.epoch % self.cfg.train_params.save_every == 0:
-                    self.save()
+            # average loss for an epoch
+            self.e_loss.append(np.mean(running_loss))  # epoch loss
+            # print(
+            #     f"{datetime.now():%Y-%m-%d %H:%M:%S} Epoch {self.epoch} summary: train Loss: {self.e_loss[-1]:.2f} \t| Val loss: {val_loss:.2f}"
+            #     f"\t| time: {t:.3f} seconds"
+            # )
 
-                gc.collect()
-                self.epoch += 1
+            self.logger.log_metrics(
+                {
+                    "epoch": self.epoch,
+                    "epoch_loss": self.e_loss[-1],
+                }
+            )
+
+            # early_stopping needs the validation loss to check if it has decreased,
+            # and if it has, it will make a checkpoint of the current model
+            #self.early_stopping(val_loss, self.model)
+
+            if self.early_stopping.early_stop:
+                print("Early stopping")
+                self.save()
+                break
+
+            if self.epoch % self.cfg.train_params.save_every == 0:
+                self.save()
+
+            gc.collect()
+            print("Task: " + task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
+            self.epoch += 1
 
         # Update bn statistics for the swa_model at the end
-        if self.epoch >= self.cfg.train_params.swa_start:
-            torch.optim.swa_utils.update_bn(self.data, self.swa_model)
-            self.save(name=self.cfg.directory.model_name + "-final" + str(self.epoch) + "-swa")
+        #if self.epoch >= self.cfg.train_params.swa_start:
+#            torch.optim.swa_utils.update_bn(self.data.to(self.device), self.swa_model)
+            #self.save(name=self.cfg.directory.model_name + "-final" + str(self.epoch) + "-swa")
 
-        macs, params = op_counter(self.model, sample=x)
-        print(macs, params)
-        #self.logger.log_metrics({"GFLOPS": macs[:-1], "#Params": params[:-1]})
+        #macs, params = op_counter(self.model, sample=x)
+        #print(macs, params)
+        #self.logger.log_metrics({"GFLOPS": macs[:-1], "#Params": params[:-1], "task name": task.get_name(), "total_loss": self.e_loss[-1]})
         print("Training Finished!")
         return loss
 
@@ -295,7 +295,4 @@ class Learner:
             )
 
 
-if __name__ == "__main__":
-    cfg_path = "./conf/config"
-    learner = Learner(cfg_path)
-    learner.train()
+

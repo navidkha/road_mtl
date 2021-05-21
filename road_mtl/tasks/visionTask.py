@@ -33,6 +33,7 @@ class VisionTask:
 
         # stores accuracy of task when it trained as single task.
         self._acc_threshold = 0
+        self.mlp = make_mlp(self.decode_dims, self.decode_activation_function)
 
         print_info("Task: " + str(task_name) + " created")
 
@@ -45,11 +46,14 @@ class VisionTask:
     def get_name(self):
         return self.task_name
 
-    def decode(self, encoded_vec):
-        mlp = make_mlp(self.decode_dims, self.decode_activation_function)
-        return mlp(encoded_vec)
+    def go_to_gpu(self, dev):
+        self.mlp.to(device=dev)
 
-    def set_acc_threshold(self, acc):
+    def decode(self, encoded_vec):
+        #mlp = make_mlp(self.decode_dims, self.decode_activation_function)
+        return self.mlp(encoded_vec)
+
+    def set_acc_threshold(self, acc, logger):
         self._acc_threshold = acc
         #TODO store on file
         stat =  self.task_name + ": " + str(acc)
@@ -77,7 +81,7 @@ class VisionTask:
         for i in range(batch_size):
             flat_label = torch.empty(0)
             box_count = len(labels[i][-1])
-            for j in range(box_count):
+            for j in range(min(box_count, self._max_box_count)):
                 l = labels[i][-1][j] # len(l) = 149
                 l = l[self.boundary[0]:self.boundary[1]]
                 if torch.count_nonzero(l) > 0:
@@ -90,7 +94,6 @@ class VisionTask:
             for k in range (self._output_max_size - len(flat_label)):
                 flat_label = torch.cat((flat_label, zero_tensor))
 
-            print("len(flat_label): " +  str(len(flat_label)))
             flat_labels[i] = flat_label
 
         return flat_labels
