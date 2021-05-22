@@ -7,9 +7,9 @@ import torch
 
 class VisionTask:
 
-    def __init__(self, task_name, decode_dims, activation_function):
+    _max_box_count = 20
 
-        self._max_box_count = 20
+    def __init__(self, task_name, decode_dims, activation_function):
 
         self.task_name = task_name
         self.decode_dims = decode_dims
@@ -81,7 +81,7 @@ class VisionTask:
         for i in range(batch_size):
             flat_label = torch.empty(0)
             box_count = len(labels[i][-1])
-            for j in range(min(box_count, self._max_box_count)):
+            for j in range(min(box_count, VisionTask._max_box_count)):
                 l = labels[i][-1][j] # len(l) = 149
                 l = l[self.boundary[0]:self.boundary[1]]
                 if torch.count_nonzero(l) > 0:

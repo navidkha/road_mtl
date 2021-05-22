@@ -131,9 +131,7 @@ class Learner:
                 )
 
                 if internel_iter < 10:
-                    img = images[-1][0:3]
-                    img = draw_text(img, "Mohammad")
-                    print(images.shape)
+                    img = self.log_image_with_text(images[-1][0:3], gt_labels[-1][-1], task)
                     self.logger.log_image(img, name=str(img_indexs[-1]), image_channels='first')
 
             #bar.close()
@@ -189,34 +187,48 @@ class Learner:
         return loss
 
 
-    @timeit
-    @torch.no_grad()
-    def validate(self):
+    def log_image_with_text(self, img_tensor, labels, task):
+        definitions = []
+        box_count = len(labels)
+        for j in range(min(box_count, VisionTask._max_box_count)):
+            l = labels[j]  # len(l) = 149
+            l = l[task.boundary[0]:task.boundary[1]]
+            definition_idx = np.nonzero(l)[0][0]
+            definitions.append(self._labels_definition[definition_idx])
 
-        self.model.eval()
+        img = draw_text(img_tensor, definitions)
+        # print(images.shape)
+        self.logger.log_image(img, name="v", image_channels='first')
 
-        running_loss = []
 
-        for idx, (x, y) in tqdm(enumerate(self.val_data), desc="Validation"):
-            # move data to device
-            x = x.to(device=self.device)
-            y = y.to(device=self.device)
-
-            # forward, backward
-            if self.epoch > self.cfg.train_params.swa_start:
-                # Update bn statistics for the swa_model
-                torch.optim.swa_utils.update_bn(self.data, self.swa_model)
-                out = self.swa_model(x)
-            else:
-                out = self.model(x)
-
-            loss = self.criterion(out, y)
-            running_loss.append(loss.item())
-
-        # average loss
-        loss = np.mean(running_loss)
-
-        return loss
+    # @timeit
+    # @torch.no_grad()
+    # def validate(self):
+    #
+    #     self.model.eval()
+    #
+    #     running_loss = []
+    #
+    #     for idx, (x, y) in tqdm(enumerate(self.val_data), desc="Validation"):
+    #         # move data to device
+    #         x = x.to(device=self.device)
+    #         y = y.to(device=self.device)
+    #
+    #         # forward, backward
+    #         if self.epoch > self.cfg.train_params.swa_start:
+    #             # Update bn statistics for the swa_model
+    #             torch.optim.swa_utils.update_bn(self.data, self.swa_model)
+    #             out = self.swa_model(x)
+    #         else:
+    #             out = self.model(x)
+    #
+    #         loss = self.criterion(out, y)
+    #         running_loss.append(loss.item())
+    #
+    #     # average loss
+    #     loss = np.mean(running_loss)
+    #
+    #     return loss
 
     def init_logger(self, cfg):
         logger = None
