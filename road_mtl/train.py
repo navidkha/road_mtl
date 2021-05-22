@@ -6,6 +6,7 @@ import sys
 import torch.nn as nn
 
 from tasks.visionTask import VisionTask
+from utils.imageUtils import *
 
 try:
     sys.path.append(str(Path(".").resolve()))
@@ -129,7 +130,11 @@ class Learner:
                     epoch=self.epoch
                 )
 
-                self.logger.log_image(images[-1], name=str(img_indexs[-1]))
+                if internel_iter < 10:
+                    img = images[-1][0:3]
+                    img = draw_text(img, "Mohammad")
+                    print(images.shape)
+                    self.logger.log_image(img, name=str(img_indexs[-1]), image_channels='first')
 
             #bar.close()
             if self.epoch > self.cfg.train_params.swa_start:
