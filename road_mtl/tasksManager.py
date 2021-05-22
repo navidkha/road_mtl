@@ -13,8 +13,9 @@ def OneHotTOInt(label):
 
 class TasksManager:
 
-    def __init__(self, data_loader: DataLoader, seq_len):
+    def __init__(self, data_loader: DataLoader, seq_len, labels_definition):
         self._data_loader = data_loader
+        self._labels_definition = labels_definition
         self._seq_len = seq_len
         self.criterion = None
         self._tasks_list = []
@@ -39,7 +40,7 @@ class TasksManager:
         cfg_path = "./conf/config"
         for task in self._tasks_list:
             print("Task: " + task_name + " started.")
-            learner = Learner(cfg_path, self._data_loader, encoder)
+            learner = Learner(cfg_path, self._data_loader, encoder, labels_definition=self._labels_definition)
             acc = learner.train(task)
             print("Task: " + task_name + " finished. Loss is: " + str(acc))
             task.set_acc_threshold(acc)

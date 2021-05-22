@@ -13,6 +13,7 @@ from tasks.resnet import ResNet
 from tasks.taskCreator import TaskCreator
 
 import model.transforms as vtf
+from tasks.taskNames import VisionTaskName
 from utils.printUtility import print_warn
 
 IMAGE_HEIGHT = 224
@@ -48,6 +49,8 @@ class VideoDataset(tutils.data.Dataset):
 
     def __init__(self, args, input_type='rgb', skip_step=1, train=True):
 
+        self._labels_definition = {}
+
         self.SUBSETS = 'train'#args.SUBSETS
         self.SEQ_LEN = args.SEQ_LEN
         self.BATCH_SIZE = args.BATCH_SIZE
@@ -70,6 +73,8 @@ class VideoDataset(tutils.data.Dataset):
         self._make_lists_road()
         self.transform = self._get_train_transform()
 
+    def get_labels_definition(self):
+        return self._labels_definition
 
     def _make_lists_road(self):
 
@@ -77,6 +82,9 @@ class VideoDataset(tutils.data.Dataset):
 
         with open(self.anno_file,'r') as fff:
             final_annots = json.load(fff)
+
+        agent_labels = final_annots["agent_labels"]
+        self._labels_definition[VisionTaskName.ActiveAgentDetection.value] = agent_labels
         
         database = final_annots['db']
         

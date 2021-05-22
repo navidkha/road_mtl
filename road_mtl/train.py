@@ -27,8 +27,9 @@ from utils.utility import get_conf, timeit
 
 
 class Learner:
-    def __init__(self, cfg_dir: str, data_loader, model):
+    def __init__(self, cfg_dir: str, data_loader, model, labels_definition):
         self.cfg = get_conf(cfg_dir)
+        self._labels_definition = labels_definition
         #TODO
         self.logger = self.init_logger(self.cfg.logger)[0]
         #self.dataset = CustomDataset(**self.cfg.dataset)
@@ -128,6 +129,8 @@ class Learner:
                     epoch=self.epoch
                 )
 
+                self.logger.log_image(images[-1], name=str(img_indexs[-1]))
+
             #bar.close()
             if self.epoch > self.cfg.train_params.swa_start:
                 self.swa_model.update_parameters(self.model)
@@ -180,34 +183,35 @@ class Learner:
         print("Training Finished!")
         return loss
 
+
     @timeit
     @torch.no_grad()
-    # def validate(self):
+    def validate(self):
 
-    #     self.model.eval()
+        self.model.eval()
 
-    #     running_loss = []
+        running_loss = []
 
-    #     for idx, (x, y) in tqdm(enumerate(self.val_data), desc="Validation"):
-    #         # move data to device
-    #         x = x.to(device=self.device)
-    #         y = y.to(device=self.device)
+        for idx, (x, y) in tqdm(enumerate(self.val_data), desc="Validation"):
+            # move data to device
+            x = x.to(device=self.device)
+            y = y.to(device=self.device)
 
-    #         # forward, backward
-    #         if self.epoch > self.cfg.train_params.swa_start:
-    #             # Update bn statistics for the swa_model
-    #             torch.optim.swa_utils.update_bn(self.data, self.swa_model)
-    #             out = self.swa_model(x)
-    #         else:
-    #             out = self.model(x)
+            # forward, backward
+            if self.epoch > self.cfg.train_params.swa_start:
+                # Update bn statistics for the swa_model
+                torch.optim.swa_utils.update_bn(self.data, self.swa_model)
+                out = self.swa_model(x)
+            else:
+                out = self.model(x)
 
-    #         loss = self.criterion(out, y)
-    #         running_loss.append(loss.item())
+            loss = self.criterion(out, y)
+            running_loss.append(loss.item())
 
-    #     # average loss
-    #     loss = np.mean(running_loss)
+        # average loss
+        loss = np.mean(running_loss)
 
-    #     return loss
+        return loss
 
     def init_logger(self, cfg):
         logger = None

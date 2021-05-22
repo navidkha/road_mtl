@@ -11,7 +11,31 @@ import argparse
 
 from utils.printUtility import print_info, print_warn
 
+import matplotlib.pylab as plt
+from PIL import Image, ImageFont
+from PIL import ImageDraw
+def draw_text(img, text):
+    font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-L.ttf", size=36)
+    ImageDraw.Draw(
+        img  # Image
+    ).text(
+        (100, 100),  # Coordinates
+        text,  # Text
+        (255, 0, 0),  # Color
+        font=font
+    )
+    plt.imshow(img)
+    plt.show()
+
+
+
 if __name__ == "__main__":
+
+    # img = Image.open("/home/mohsen/Downloads/11.png")
+    # draw_text(img, "Mohammad")
+
+
+
     parser = argparse.ArgumentParser(description='Training')
     parser.add_argument('DATA_ROOT', help='Location to root directory for dataset reading')  # /mnt/mars-fast/datasets/
     # parser.add_argument('SAVE_ROOT', help='Location to root directory for saving checkpoint models') # /mnt/mars-alpha/
@@ -58,7 +82,8 @@ if __name__ == "__main__":
                                  collate_fn=custum_collate,
                                  drop_last=True)
 
-        tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN)
+        tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN,
+                                     labels_definition=data_set.get_labels_definition())
         tasks_manager.run_tasks_single("ActiveAgentDetection")
         tasks_manager.run_multi_tasks()
 
