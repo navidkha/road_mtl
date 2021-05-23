@@ -32,7 +32,7 @@ class Learner:
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
         #TODO
-        self.logger = self.init_logger(self.cfg.logger)[0]
+        self.logger = self.init_logger(self.cfg.logger)
         #self.dataset = CustomDataset(**self.cfg.dataset)
         self.data = data_loader
         #self.val_dataset = CustomDatasetVal(**self.cfg.val_dataset)
@@ -131,8 +131,12 @@ class Learner:
                 )
 
                 if internel_iter < 10:
-                    img = self.log_image_with_text(images[-1][0:3], gt_labels[-1][-1], task)
-                    self.logger.log_image(img, name=str(img_indexs[-1]), image_channels='first')
+                    sz = wh[0][0].item()
+                    img = torch.zeros([3, sz, sz])
+                    img[0] = images[-1][self.cfg.dataloader.seq_len-1]
+                    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
+                    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
+                    self.log_image_with_text(img, gt_labels[-1][-1], task)
 
             #bar.close()
             if self.epoch > self.cfg.train_params.swa_start:
@@ -193,8 +197,9 @@ class Learner:
         for j in range(min(box_count, VisionTask._max_box_count)):
             l = labels[j]  # len(l) = 149
             l = l[task.boundary[0]:task.boundary[1]]
-            definition_idx = np.nonzero(l)[0][0]
-            definitions.append(self._labels_definition[definition_idx])
+            if len(np.nonzero(l)) > 0:
+                definition_idx = np.nonzero(l)[0][0]
+                definitions.append(self._labels_definition[task.get_name()][definition_idx])
 
         img = draw_text(img_tensor, definitions)
         # print(images.shape)

@@ -18,4 +18,4 @@ def draw_text(t, text_list):
             (255, 0, 0),  # Color
             font=font
         )
-    return img
+    return transforms.ToTensor()(img)
