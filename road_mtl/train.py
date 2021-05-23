@@ -88,7 +88,7 @@ class Learner:
     def train(self, task:VisionTask):
         task.go_to_gpu(self.device)
 
-        visualize_idx = random.randrange(0, len(self.data), 50)
+        visualize_idx = np.random.randint(0, len(self.data), 50)
 
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
@@ -141,35 +141,13 @@ class Learner:
                 #    img[0] = images[-1][self.cfg.dataloader.seq_len -1]
                 #    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
                 #    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
-                #    self.log_image_with_text(img, gt_labels[-1][-1], task)
+                #    self.log_image_with_text_on_it(img, gt_labels[-1][-1], task)
                     #self.logger.log_image(img, name="v", image_channels='first')
 
             #bar.close()
             
             # Visualize
-            print("===================================================")
-            for i in visualize_idx:
-                images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = self.data.__getitem__(i)
-                sz = wh[0][0].item()
-                img = torch.zeros([3, sz, sz])
-                self.logger.log_image(img, name="v", image_channels='first')
-                img[0] = images[-1][self.cfg.dataloader.seq_len -1]
-                img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
-                img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
-                
-                y = task.get_flat_label(gt_labels)
-                x = images
-      
-                # move data to device
-                x = x.to(device=self.device)
-                y = y.to(device=self.device)
-
-                encoded_vector = self.model(x)
-                out = task.decode(encoded_vector)
-
-                self.log_image_with_text(img, gt_labels[-1][-1], task)
-             print("===================================================")
-
+            self.predict_visualize(index_list=visualize_idx, task=task)
 
             if self.epoch > self.cfg.train_params.swa_start:
                 self.swa_model.update_parameters(self.model)
@@ -222,8 +200,50 @@ class Learner:
         print("Training Finished!")
         return loss
 
+    def predict_visualize(self, index_list, task):
+        print("===================================================")
+        for i in index_list:
+            images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = self.data.__getitem__(i)
+            sz = wh[0][0].item()
+            img = torch.zeros([3, sz, sz])
+            img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
+            img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
+            img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
 
-    def log_image_with_text(self, img_tensor, labels, task):
+            y = task.get_flat_label(gt_labels)
+            x = images
+
+            # move data to device
+            x = x.to(device=self.device)
+            y = y.to(device=self.device)
+
+            encoded_vector = self.model(x)
+            out = task.decode(encoded_vector)
+            self.log_image_with_text(img_tensor=img, out_vector=out, index=i, task=task)
+        print("===================================================")
+
+    def log_image_with_text(self, img_tensor, out_vector, index, task):
+        definitions = []
+        label_len = task.boundary[1]-task.boundary[0]
+        name = "img_" + str(index)
+        i = 0
+        while True:
+            finished = out_vector[i]
+            if finished == True:
+                break
+            i += 1
+
+            l = out_vector[i, label_len]
+            i += label_len
+            if len(np.nonzero(l)) > 0:
+                definition_idx = np.nonzero(l)[0][0]
+                definitions.append(name + ": " + self._labels_definition[task.get_name()][definition_idx])
+
+        print(definitions)
+        self.logger.log_image(img_tensor, name=name, image_channels='first')
+
+
+    def log_image_with_text_on_it(self, img_tensor, labels, task):
         definitions = []
         box_count = len(labels)
         for j in range(min(box_count, VisionTask._max_box_count)):
