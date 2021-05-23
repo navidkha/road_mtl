@@ -25,14 +25,14 @@ from model.net import CustomModel
 from utils.nn import check_grad_norm, init_weights_normal, EarlyStopping, op_counter
 from utils.io import save_checkpoint, load_checkpoint
 from utils.utility import get_conf, timeit
-
+import random
 
 class Learner:
     def __init__(self, cfg_dir: str, data_loader, model, labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
         #TODO
-        self.logger = self.init_logger(self.cfg.logger)[0]
+        self.logger = self.init_logger(self.cfg.logger)
         #self.dataset = CustomDataset(**self.cfg.dataset)
         self.data = data_loader
         #self.val_dataset = CustomDatasetVal(**self.cfg.val_dataset)
@@ -87,6 +87,9 @@ class Learner:
 
     def train(self, task:VisionTask):
         task.go_to_gpu(self.device)
+
+        visualize_idx = random.randrange(0, len(self.data), 50)
+
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
@@ -130,11 +133,44 @@ class Learner:
                     epoch=self.epoch
                 )
 
-                if internel_iter < 10:
-                    img = self.log_image_with_text(images[-1][0:3], gt_labels[-1][-1], task)
-                    self.logger.log_image(img, name=str(img_indexs[-1]), image_channels='first')
+                #if internel_iter < 10:
+                #    sz = wh[0][0].item()
+                #    img = torch.zeros([3, sz, sz])
+                #    print(img.shape)
+                #    print(images.shape)
+                #    img[0] = images[-1][self.cfg.dataloader.seq_len -1]
+                #    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
+                #    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
+                #    self.log_image_with_text(img, gt_labels[-1][-1], task)
+                    #self.logger.log_image(img, name="v", image_channels='first')
 
             #bar.close()
+            
+            # Visualize
+            print("===================================================")
+            for i in visualize_idx:
+                images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = self.data.__getitem__(i)
+                sz = wh[0][0].item()
+                img = torch.zeros([3, sz, sz])
+                self.logger.log_image(img, name="v", image_channels='first')
+                img[0] = images[-1][self.cfg.dataloader.seq_len -1]
+                img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
+                img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
+                
+                y = task.get_flat_label(gt_labels)
+                x = images
+      
+                # move data to device
+                x = x.to(device=self.device)
+                y = y.to(device=self.device)
+
+                encoded_vector = self.model(x)
+                out = task.decode(encoded_vector)
+
+                self.log_image_with_text(img, gt_labels[-1][-1], task)
+             print("===================================================")
+
+
             if self.epoch > self.cfg.train_params.swa_start:
                 self.swa_model.update_parameters(self.model)
                 self.swa_scheduler.step()
@@ -193,12 +229,14 @@ class Learner:
         for j in range(min(box_count, VisionTask._max_box_count)):
             l = labels[j]  # len(l) = 149
             l = l[task.boundary[0]:task.boundary[1]]
-            definition_idx = np.nonzero(l)[0][0]
-            definitions.append(self._labels_definition[definition_idx])
+            if len(np.nonzero(l)) > 0:
+                definition_idx = np.nonzero(l)[0][0]
+                definitions.append(self._labels_definition[task.get_name()][definition_idx])
 
         img = draw_text(img_tensor, definitions)
+        print(definitions)
         # print(images.shape)
-        self.logger.log_image(img, name="v", image_channels='first')
+        self.logger.log_image(img_tensor, name="v", image_channels='first')
 
 
     # @timeit

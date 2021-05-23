@@ -1,10 +1,10 @@
 # Training parameters
 train_params:
-  epochs: 50
-  device: "cpu" # device name, values: "cpu" or "cuda:x" where 'x' is gpu index
+  epochs: 1
+  device: "cuda:0" # device name, values: "cpu" or "cuda:x" where 'x' is gpu index
   optimizer: "adam"
   save_every: 10
-  swa_start: 30 # start epoch of stochastic weight averaging
+  swa_start: 0 # start epoch of stochastic weight averaging
   patience: 3 # how many epochs we want to wait after the last time the validation loss improved before breaking the training loop
   early_stopping_delta: 0
 
@@ -20,6 +20,7 @@ logger:
 
 # Dataloader parameters
 dataloader:
+  seq_len: 1
   num_workers: 2 # Allowing multi-processing
   batch_size: 64
   shuffle: True # whether to shuffle data or not
