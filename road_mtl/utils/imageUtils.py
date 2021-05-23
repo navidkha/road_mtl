@@ -1,11 +1,13 @@
 import matplotlib.pylab as plt
 from PIL import Image, ImageFont
 from PIL import ImageDraw
-
+import numpy as np
 from torchvision import transforms
 
+
 def draw_text(t, text_list):
-    img = transforms.ToPILImage()(t).convert("RGB")
+    t = t.squeeze(0)
+    img = transforms.ToPILImage(mode="RGB")(t)
     font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-L.ttf", size=18)
     offset = 10
     step = 30
@@ -18,4 +20,5 @@ def draw_text(t, text_list):
             (255, 0, 0),  # Color
             font=font
         )
-    return transforms.ToTensor()(img)
+    #return transforms.ToTensor()(img)
+    return img
