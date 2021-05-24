@@ -49,7 +49,7 @@ if __name__ == "__main__":
                         type=str, help='Testing SUBSETS separated by ,')
     parser.add_argument('--MODE', default='train',
                         help='MODE can be train, gen_dets, eval_frames, eval_tubes define SUBSETS accordingly, build tubes')
-    parser.add_argument('--SEQ_LEN', default=1,
+    parser.add_argument('--SEQ_LEN', default=8,
                         type=int, help='Number of input frames')
     parser.add_argument('-b', '--BATCH_SIZE', default=8,
                         type=int, help='Batch size for training')

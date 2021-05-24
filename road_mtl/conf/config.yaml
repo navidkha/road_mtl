@@ -20,7 +20,7 @@ logger:
 
 # Dataloader parameters
 dataloader:
-  seq_len: 1
+  seq_len: 8
   num_workers: 2 # Allowing multi-processing
   batch_size: 64
   shuffle: True # whether to shuffle data or not
