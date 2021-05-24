@@ -76,6 +76,23 @@ class VideoDataset(tutils.data.Dataset):
     def get_labels_definition(self):
         return self._labels_definition
 
+    def load_labels_definition(self, final_annots):
+
+        agent_labels = final_annots["agent_labels"]
+        self._labels_definition[VisionTaskName.ActiveAgentDetection.value] = agent_labels
+
+        action_labels = final_annots["action_labels"]
+        self._labels_definition[VisionTaskName.ActionDetection.value] = action_labels
+
+        loc_labels = final_annots["loc_labels"]
+        self._labels_definition[VisionTaskName.LocationDetection.value] = loc_labels
+
+        duplex_labels = final_annots["duplex_labels"]
+        self._labels_definition[VisionTaskName.InAgentActionDetection.value] = duplex_labels
+        
+        triplet_labels = final_annots["triplet_labels"]
+        self._labels_definition[VisionTaskName.RoadEventDetection.value] = triplet_labels
+
     def _make_lists_road(self):
 
         self.anno_file  = os.path.join(self.root, 'road_trainval_v1.0.json')
@@ -83,9 +100,8 @@ class VideoDataset(tutils.data.Dataset):
         with open(self.anno_file,'r') as fff:
             final_annots = json.load(fff)
 
-        agent_labels = final_annots["agent_labels"]
-        self._labels_definition[VisionTaskName.ActiveAgentDetection.value] = agent_labels
-        
+        self.load_labels_definition(final_annots)
+
         database = final_annots['db']
         
         self.label_types =  final_annots['label_types'] #['agent', 'action', 'loc', 'duplex', 'triplet'] #
