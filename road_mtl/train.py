@@ -3,6 +3,7 @@ import gc
 from pathlib import Path
 from datetime import datetime
 import sys
+from comet_ml.connection import pending_rpcs_url
 import torch.nn as nn
 
 from tasks.visionTask import VisionTask
@@ -133,6 +134,30 @@ class Learner:
                     epoch=self.epoch
                 )
 
+
+                #validation
+                if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
+                    print("Internel iter: ", internel_iter)
+                    out = m(out[-1])
+                    definitions = []
+                    l = task.boundary[1]-task.boundary[0]
+                    n_boxes = len(gt_boxes[-1][-1])
+                    print("Number of Boxes:", n_boxes)
+                    name = "img_" + str(self.epoch) + "_" + str(internel_iter/1000)
+                    for i in range (n_boxes):
+                        prediction = out[i*l + 1 + i : i*l + l + 1 + i]
+                        prediction = prediction.argmax()
+                        definitions.append(name + ": " + self._labels_definition[task.get_name()][prediction])
+                        
+                    print("list", definitions)
+                    sz = wh[0][0].item()    
+                    img = torch.zeros([3, sz, sz])
+                    img[0] = images[-1][self.cfg.dataloader.seq_len -1]
+                    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
+                    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
+                    self.logger.log_image(img, name=name, image_channels='first')
+
+
                 #if internel_iter < 10:
                 #    sz = wh[0][0].item()
                 #    img = torch.zeros([3, sz, sz])
@@ -147,7 +172,7 @@ class Learner:
             #bar.close()
             
             # Visualize
-            self.predict_visualize(index_list=visualize_idx, task=task)
+            # self.predict_visualize(index_list=visualize_idx, task=task)
 
             if self.epoch > self.cfg.train_params.swa_start:
                 self.swa_model.update_parameters(self.model)

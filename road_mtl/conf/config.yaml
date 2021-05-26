@@ -1,6 +1,6 @@
 # Training parameters
 train_params:
-  epochs: 1
+  epochs: 50
   device: "cuda:0" # device name, values: "cpu" or "cuda:x" where 'x' is gpu index
   optimizer: "adam"
   save_every: 10
@@ -20,7 +20,7 @@ logger:
 
 # Dataloader parameters
 dataloader:
-  seq_len: 1
+  seq_len: 8
   num_workers: 2 # Allowing multi-processing
   batch_size: 64
   shuffle: True # whether to shuffle data or not

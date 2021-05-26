@@ -35,7 +35,7 @@ class VisionTask:
         self._acc_threshold = 0
         self.mlp = make_mlp(self.decode_dims, self.decode_activation_function)
 
-        print_info("Task: " + str(task_name) + " created")
+        print("Task: " + str(task_name) + " created")
 
     def __repr__(self):
         print(self.task_name)
@@ -57,7 +57,7 @@ class VisionTask:
         self._acc_threshold = acc
         #TODO store on file
         stat =  self.task_name + ": " + str(acc)
-        print_magenta(stat)
+        print(stat)
         #logger.info(stat)
 
 
