@@ -28,7 +28,7 @@ from utils.utility import get_conf, timeit
 import random
 
 class Learner:
-    def __init__(self, cfg_dir: str, data_loader, model, labels_definition):
+    def __init__(self, cfg_dir: str, data_loader:DataLoader, model, labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
         #TODO
@@ -203,12 +203,8 @@ class Learner:
     def predict_visualize(self, index_list, task):
         print("===================================================")
         for i in index_list:
-            images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = self.data.__getitem__(i)
-            sz = wh[0][0].item()
-            img = torch.zeros([3, sz, sz])
-            img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
-            img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
-            img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
+            images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = self.data.dataset.__getitem__(i)
+            sz = img_indexs[0]
 
             y = task.get_flat_label(gt_labels)
             x = images
@@ -219,7 +215,7 @@ class Learner:
 
             encoded_vector = self.model(x)
             out = task.decode(encoded_vector)
-            self.log_image_with_text(img_tensor=img, out_vector=out, index=i, task=task)
+            self.log_image_with_text(img_tensor=images, out_vector=out, index=i, task=task)
         print("===================================================")
 
     def log_image_with_text(self, img_tensor, out_vector, index, task):

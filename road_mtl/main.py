@@ -84,6 +84,9 @@ if __name__ == "__main__":
 
         tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN,
                                      labels_definition=data_set.get_labels_definition())
+
+        images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = data_loader.dataset.__getitem__(10)
+
         tasks_manager.run_tasks_single("ActiveAgentDetection")
         tasks_manager.run_multi_tasks()
 
