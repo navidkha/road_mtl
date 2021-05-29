@@ -63,6 +63,8 @@ if __name__ == "__main__":
                         type=int, help='Number of threads')
     parser.add_argument('--DEBUG', default=False,
                         type=bool, help='Is debug mode')
+    parser.add_argument('--MULTI', default=True,
+                        type=bool, help='Is multi task learning mode')
 
     args = parser.parse_args()
     args = utils.set_args(args)  # set SUBSETS of datasets
@@ -87,8 +89,12 @@ if __name__ == "__main__":
 
         images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = data_loader.dataset.__getitem__(10)
 
-        #tasks_manager.run_tasks_single()
-        tasks_manager.run_multi_tasks()
+        if args.MULTI == False:
+            print("--------- Single task run mode selected. --------- ")
+            tasks_manager.run_tasks_single()
+        else:
+            print("--------- Multi task run mode selected. --------- ")
+            tasks_manager.run_multi_tasks()
 
     else:
         args.MAX_SEQ_STEP = 1
