@@ -225,6 +225,144 @@ class Learner:
         print("Training Finished!")
         return loss
 
+    def train_multi(self, primary_task, auxiliary_tasks):
+
+        # 1- got to gpu fo all tasks
+        for auxilary_task in auxiliary_tasks:
+            auxilary_task.go_to_gpu(self.device)
+        primary_task.go_to_gpu(self.device)
+
+        activation_function = nn.Sigmoid()
+
+        while self.epoch <= self.cfg.train_params.epochs:
+            running_loss = []
+            self.model.train()
+
+            for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(
+                    self.data):
+                self.optimizer.zero_grad()
+
+                x = images
+                x = x.to(device=self.device)
+                encoded_vector = self.model(x)
+
+                total_loss = None
+                # for auxiliary tasks
+                for auxiliary_task in auxiliary_tasks:
+                    y = auxiliary_task.get_flat_label(gt_labels)
+                    # move data to device
+                    y = y.to(device=self.device)
+                    # forward
+                    out = auxiliary_task.decode(encoded_vector)
+                    auxiliary_loss = self.criterion(activation_function(out), y)
+                    total_loss += auxiliary_loss
+
+                # for primary task
+                y = primary_task.get_flat_label(gt_labels)
+                # move data to device
+                y = y.to(device=self.device)
+                # forward
+                out = primary_task.decode(encoded_vector)
+                primary_loss = self.criterion(activation_function(out), y)
+                total_loss += primary_loss
+
+
+                total_loss.backward()
+                # check grad norm for debugging
+                grad_norm = check_grad_norm(self.model)
+                # update
+                self.optimizer.step()
+
+                running_loss.append(primary_loss.item())
+
+                self.logger.log_metrics(
+                    {
+                        # "epoch": self.epoch,
+                        "batch": internel_iter,
+                        "primary_loss": primary_loss.item(),
+                        "GradNorm": grad_norm,
+                    },
+                    epoch=self.epoch
+                )
+
+                # validation
+                if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
+                    print("Internel iter: ", internel_iter)
+                    out = activation_function(out[-1])
+                    definitions = []
+                    l = primary_task.boundary[1] - primary_task.boundary[0]
+                    n_boxes = len(gt_boxes[-1][-1])
+                    print("Number of Boxes:", n_boxes)
+                    name = "img_" + str(self.epoch) + "_" + str(internel_iter / 1000)
+                    for i in range(n_boxes):
+                        prediction = out[i * l + 1 + i: i * l + l + 1 + i]
+                        prediction = prediction.argmax()
+                        definitions.append(name + ": " + self._labels_definition[primary_task.get_name()][prediction])
+
+                    print("list", definitions)
+                    sz = wh[0][0].item()
+                    img = torch.zeros([3, sz, sz])
+                    img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
+                    img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
+                    img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
+
+                    draw_text(img, definitions)
+                    #self.logger.log_image(img, name=name, image_channels='first')
+
+            # Visualize
+            # self.predict_visualize(index_list=visualize_idx, task=task)
+
+            if self.epoch > self.cfg.train_params.swa_start:
+                self.swa_model.update_parameters(self.model)
+                self.swa_scheduler.step()
+            else:
+                self.lr_scheduler.step()
+
+            # validate on val set
+            # val_loss, t = self.validate()
+            # t /= len(self.val_dataset)
+
+            # average loss for an epoch
+            self.e_loss.append(np.mean(running_loss))  # epoch loss
+            # print(
+            #     f"{datetime.now():%Y-%m-%d %H:%M:%S} Epoch {self.epoch} summary: train Loss: {self.e_loss[-1]:.2f} \t| Val loss: {val_loss:.2f}"
+            #     f"\t| time: {t:.3f} seconds"
+            # )
+
+            self.logger.log_metrics(
+                {
+                    "epoch": self.epoch,
+                    "epoch_loss": self.e_loss[-1],
+                }
+            )
+
+            # early_stopping needs the validation loss to check if it has decreased,
+            # and if it has, it will make a checkpoint of the current model
+            # self.early_stopping(val_loss, self.model)
+
+            if self.early_stopping.early_stop:
+                print("Early stopping")
+                self.save()
+                break
+
+            if self.epoch % self.cfg.train_params.save_every == 0:
+                self.save()
+
+            gc.collect()
+            print("Task: " + primary_task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
+            self.epoch += 1
+
+        # Update bn statistics for the swa_model at the end
+        # if self.epoch >= self.cfg.train_params.swa_start:
+        #            torch.optim.swa_utils.update_bn(self.data.to(self.device), self.swa_model)
+        # self.save(name=self.cfg.directory.model_name + "-final" + str(self.epoch) + "-swa")
+
+        # macs, params = op_counter(self.model, sample=x)
+        # print(macs, params)
+        # self.logger.log_metrics({"GFLOPS": macs[:-1], "#Params": params[:-1], "task name": task.get_name(), "total_loss": self.e_loss[-1]})
+        print("Training Finished!")
+        return primary_loss
+
     def predict_visualize(self, index_list, task):
         print("===================================================")
         for i in index_list:

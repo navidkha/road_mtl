@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
         images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = data_loader.dataset.__getitem__(10)
 
-        tasks_manager.run_tasks_single("ActiveAgentDetection")
+        #tasks_manager.run_tasks_single()
         tasks_manager.run_multi_tasks()
 
     else:

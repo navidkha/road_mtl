@@ -35,43 +35,34 @@ class TasksManager:
         # self._tasks_list.append(TaskCreator.continual_event_detection())
 
 
-    def run_tasks_single(self, task_name):
+    def run_tasks_single(self):
         encoder = ResNet(self._seq_len, pre_trained = True)
         cfg_path = "./conf/config"
         for task in self._tasks_list:
-            print("Task: " + task_name + " started.")
+            print("Task: " + task.get_name() + " started.")
             learner = Learner(cfg_path, self._data_loader, encoder, labels_definition=self._labels_definition)
             acc = learner.train(task)
-            print("Task: " + task_name + " finished. Loss is: " + str(acc))
+            print("Task: " + task.get_name() + " finished. Loss is: " + str(acc))
             task.set_acc_threshold(acc)
 
 
     def run_multi_tasks(self):
-        ln = len(self._data_loader)
-        encoder = ResNet(self._seq_len)
+        encoder = ResNet(self._seq_len, pre_trained=True)
+        cfg_path = "./conf/config"
 
-        for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self._data_loader):
-            print("images size: " + str(len(images)) + ", shape: " + str(images[0].shape))
+        auxiliary_task_list = []
+        for primary_task in self._tasks_list:
+            for auxiliary_task in self._tasks_list:
+                if auxiliary_task.get_name() != primary_task.get_name():
+                    print("Primary task: " + primary_task.get_name() +
+                          ", Auxiliary task: " + auxiliary_task.get_name() + " started.")
+                    learner = Learner(cfg_path, self._data_loader, encoder, labels_definition=self._labels_definition)
+                    auxiliary_task_list.clear()
+                    auxiliary_task_list.append(auxiliary_task)
+                    acc = learner.train_multi(primary_task, auxiliary_task_list)
 
-            print('-----------------------------S')
-            print(gt_boxes[0])
-            print('-----------------------------')
-            print(gt_labels[0])
-            print('-----------------------------E')
-
-            for i in range(len(self._tasks_list)):
-                primary_task = self._tasks_list[i]
-
-                encoded_vect = encoder.encode(images[0])
-                decoded = primary_task.decode(encoded_vect)
-                print(decoded)
-
-                primary_task.set_primary()
-                for j in range(len(self._tasks_list)):
-                    if not self._tasks_list[j].is_primary():
-                        auxiliary_task = self._tasks_list[j]
-
-
+                    print("Primary Task: " + primary_task.get_name() + ", Auxiliary task:" + auxiliary_task.get_name()
+                          + " finished. Primary loss is: " + str(acc))
 
 
 
