@@ -1,9 +1,9 @@
-import gc
-import sys
-from datetime import datetime
-from pathlib import Path
-
 import comet_ml
+import gc
+from pathlib import Path
+from datetime import datetime
+import sys
+from comet_ml.connection import pending_rpcs_url
 import torch.nn as nn
 
 from tasks.visionTask import VisionTask
@@ -15,23 +15,31 @@ except:
     raise RuntimeError("Can't append root directory of the project the path")
 
 import numpy as np
+from tqdm import tqdm
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.optim.swa_utils import AveragedModel
+from torch.optim.swa_utils import AveragedModel, SWALR
 
+from model.net import CustomModel
 #from model.data_loader import CustomDataset, CustomDatasetVal
-from utils.nn import check_grad_norm, EarlyStopping
+from utils.nn import check_grad_norm, init_weights_normal, EarlyStopping, op_counter
 from utils.io import save_checkpoint, load_checkpoint
-from utils.utility import get_conf
-
+from utils.utility import get_conf, timeit
+import random
 
 class Learner:
     def __init__(self, cfg_dir: str, data_loader:DataLoader, model, labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
+        #TODO
         self.logger = self.init_logger(self.cfg.logger)
+        #self.dataset = CustomDataset(**self.cfg.dataset)
         self.data = data_loader
+        #self.val_dataset = CustomDatasetVal(**self.cfg.val_dataset)
+        #self.val_data = DataLoader(self.val_dataset, **self.cfg.dataloader)
+        # self.logger.log_parameters({"tr_len": len(self.dataset),
+        #                             "val_len": len(self.val_dataset)})
         self.model = model
         #self.model._resnet.conv1.apply(init_weights_normal)
         self.device = self.cfg.train_params.device
@@ -44,7 +52,7 @@ class Learner:
             raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
 
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion = nn.L1Loss()
+        self.criterion = nn.BCELoss()
 
         if self.cfg.logger.resume:
             # load checkpoint
@@ -76,22 +84,23 @@ class Learner:
 
         # stochastic weight averaging
         self.swa_model = AveragedModel(self.model)
+        self.swa_scheduler = SWALR(self.optimizer, **self.cfg.SWA)
 
     def train(self, task:VisionTask):
-
         task.go_to_gpu(self.device)
+
+        visualize_idx = np.random.randint(0, len(self.data), 50)
 
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
-            self.logger.set_epoch(self.epoch)
 
             for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
                 self.optimizer.zero_grad()
 
                 # fl = task.get_flat_label(gt_labels)
 
-                # m = nn.Sigmoid()
+                m = nn.Sigmoid()
                 y = task.get_flat_label(gt_labels)
                 x = images
 
@@ -103,10 +112,8 @@ class Learner:
                 # forward, backward
                 encoded_vector = self.model(x)
                 out = task.decode(encoded_vector)
-                loss = self.criterion(out, y)
-                self.optimizer.zero_grad()
+                loss = self.criterion(m(out), y)
                 loss.backward()
-
                 # check grad norm for debugging
                 grad_norm = check_grad_norm(self.model)
                 # update
@@ -127,27 +134,28 @@ class Learner:
                     epoch=self.epoch
                 )
 
-                with torch.no_grad():
-                    if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
-                        print("Internel iter: ", internel_iter)
-                        out = out[-1]
-                        definitions = []
-                        l = task.boundary[1]-task.boundary[0]
-                        n_boxes = len(gt_boxes[-1][-1])
-                        print("Number of Boxes:", n_boxes)
-                        name = "img_" + str(self.epoch) + "_" + str(internel_iter/1000)
-                        for i in range (n_boxes):
-                            prediction = out[i*l + 1 + i : i*l + l + 1 + i]
-                            prediction = prediction.argmax()
-                            definitions.append(name + ": " + self._labels_definition[task.get_name()][prediction])
 
-                        print("list", definitions)
-                        sz = wh[0][0].item()
-                        img = torch.zeros([3, sz, sz])
-                        img[0] = images[-1][self.cfg.dataloader.seq_len -1]
-                        img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
-                        img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
-                        self.logger.log_image(img, name=name, image_channels='first')
+                #validation
+                if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
+                    print("Internel iter: ", internel_iter)
+                    out = m(out[-1])
+                    definitions = []
+                    l = task.boundary[1]-task.boundary[0]
+                    n_boxes = len(gt_boxes[-1][-1])
+                    print("Number of Boxes:", n_boxes)
+                    name = "img_" + str(self.epoch) + "_" + str(internel_iter/1000)
+                    for i in range (n_boxes):
+                        prediction = out[i*l + 1 + i : i*l + l + 1 + i]
+                        prediction = prediction.argmax()
+                        definitions.append(name + ": " + self._labels_definition[task.get_name()][prediction])
+                        
+                    print("list", definitions)
+                    sz = wh[0][0].item()    
+                    img = torch.zeros([3, sz, sz])
+                    img[0] = images[-1][self.cfg.dataloader.seq_len -1]
+                    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
+                    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
+                    self.logger.log_image(img, name=name, image_channels='first')
 
 
                 #if internel_iter < 10:

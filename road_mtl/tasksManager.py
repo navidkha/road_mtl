@@ -2,7 +2,7 @@ from torch.utils.data import DataLoader
 
 from tasks.resnet import ResNet
 from tasks.taskCreator import TaskCreator
-from train import Learner
+from train_prev import Learner
 
 
 def OneHotTOInt(label):

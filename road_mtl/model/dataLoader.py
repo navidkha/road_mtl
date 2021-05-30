@@ -3,6 +3,7 @@ import json
 import os
 from random import shuffle
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch.utils as tutils
 import torch.utils.data as data_utils
@@ -14,6 +15,7 @@ from tasks.taskCreator import TaskCreator
 
 import model.transforms as vtf
 from tasks.taskNames import VisionTaskName
+from utils.imageUtils import draw_text
 from utils.printUtility import print_warn
 
 IMAGE_HEIGHT = 224
@@ -272,6 +274,34 @@ class VideoDataset(tutils.data.Dataset):
                             vtf.ToTensorStack(),
                             vtf.Normalize(mean=self._mean, std=self._std)])
         return train_transform
+
+
+import torch
+import matplotlib.pyplot as ply
+if __name__ == "__main__":
+    adr = "/home/mohsen/pic.jpg"
+    _mean = [0.485, 0.456, 0.406]
+    _std = [0.229, 0.224, 0.225]
+    img = Image.open(adr).convert('RGB')
+    images = []
+    images.append(img)
+    train_transform = transforms.Compose([
+        vtf.ResizeClip(IMAGE_HEIGHT, IMAGE_WIDTH),
+        vtf.ToTensorStack(),
+        vtf.Normalize(mean=_mean, std=_std)])
+    clip = train_transform(images)
+    clip = clip.view(3 * 1, IMAGE_HEIGHT, IMAGE_WIDTH)
+
+    sz = 224
+    seq_len = 1
+    img_new = torch.zeros([3, sz, sz])
+    img_new[0] = clip[seq_len - 1]
+    img_new[1] = clip[2 * seq_len - 1]
+    img_new[2] = clip[3 * seq_len - 1]
+
+    ig = draw_text(img_new, ["smm", "zz"])
+    plt.imshow(ig)
+    plt.show()
 
 
 
