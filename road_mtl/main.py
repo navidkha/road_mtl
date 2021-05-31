@@ -63,7 +63,7 @@ if __name__ == "__main__":
                         type=int, help='Number of threads')
     parser.add_argument('--DEBUG', default=False,
                         type=bool, help='Is debug mode')
-    parser.add_argument('--MULTI', default=True,
+    parser.add_argument('--MULTI', default=False,
                         type=bool, help='Is multi task learning mode')
 
     args = parser.parse_args()
@@ -89,12 +89,13 @@ if __name__ == "__main__":
 
         images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = data_loader.dataset.__getitem__(10)
 
-        if args.MULTI == False:
-            print("--------- Single task run mode selected. --------- ")
-            tasks_manager.run_tasks_single()
-        else:
-            print("--------- Multi task run mode selected. --------- ")
-            tasks_manager.run_multi_tasks()
+        #print(args)
+        #if args.MULTI == False:
+        print("--------- Start running single task. --------- ")
+        tasks_manager.run_tasks_single()
+        #else:
+        #print("--------- Start running multi task. --------- ")
+        #tasks_manager.run_multi_tasks()
 
     else:
         args.MAX_SEQ_STEP = 1
