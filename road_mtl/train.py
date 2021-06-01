@@ -27,20 +27,24 @@ from utils.utility import get_conf
 
 
 class Learner:
-    def __init__(self, cfg_dir: str, data_loader:DataLoader, model, labels_definition):
+    def __init__(self, cfg_dir: str, data_loader:DataLoader, encoder, decoder, labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
         self.logger = self.init_logger(self.cfg.logger)
+        self.task = decoder
         self.data = data_loader
-        self.model = model
+        self.model = encoder
+        self.decoder = decoder.mlp
         self.sig = nn.Sigmoid()
         #self.model._resnet.conv1.apply(init_weights_normal)
         self.device = self.cfg.train_params.device
         self.model = self.model.to(device=self.device)
+        self.decoder = self.decoder.to(device=self.device)
         if self.cfg.train_params.optimizer.lower() == "adam":
-            self.optimizer = optim.Adam(self.model.parameters(), **self.cfg.adam)
+            params = list(self.model.parameters()) + list(self.decoder.parameters())
+            self.optimizer = optim.Adam(params, **self.cfg.adam)
         elif self.cfg.train_params.optimizer.lower() == "rmsprop":
-            self.optimizer = optim.RMSprop(self.model.parameters(), **self.cfg.rmsprop)
+            self.optimizer = optim.RMSprop([self.model.parameters(), self.decoder.parameters()], **self.cfg.rmsprop)
         else:
             raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
 
@@ -79,21 +83,18 @@ class Learner:
         self.swa_model = AveragedModel(self.model)
 
 
-    def train(self, task:VisionTask):
+    def train(self):
 
-        task.go_to_gpu(self.device)
 
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
             self.logger.set_epoch(self.epoch)
 
-            for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
-                self.optimizer.zero_grad()
+            for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
 
                 # m = nn.Sigmoid()
-                y = task.get_flat_label(gt_labels)
-                x = images
+                y = self.task.get_flat_label(gt_labels)
 
 
                 # move data to device
@@ -102,8 +103,8 @@ class Learner:
 
                 # forward, backward
                 encoded_vector = self.model(x)
-                out = task.decode(encoded_vector)
-                loss = self.criterion(out, y)
+                out = self.decoder(encoded_vector)
+                loss = self.criterion(self.sig(out), y)
                 self.optimizer.zero_grad()
                 loss.backward()
 
@@ -120,7 +121,6 @@ class Learner:
                 self.logger.log_metrics(
                     {
                     #"epoch": self.epoch,
-                    "batch": internel_iter,
                     "loss": loss.item(),
                     "GradNorm": grad_norm,
                     },
@@ -131,17 +131,13 @@ class Learner:
                     #if internel_iter % 400 == 0 and self.epoch % 3 == 0:
                     if internel_iter % 10 == 0:
                         img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
-                        self.visualize(images=images, labels=gt_labels, task=task,
+                        self.visualize(images=x, labels=gt_labels, task= self.task,
                                        output=out, img_name=img_name, img_size=wh[0][0].item())
 
             #bar.close()
             
-
-            if self.epoch > self.cfg.train_params.swa_start:
-                self.swa_model.update_parameters(self.model)
-                #self.swa_scheduler.step()
-            else:
-                self.lr_scheduler.step()
+           
+            self.lr_scheduler.step()
 
             # validate on val set
             # val_loss, t = self.validate()
@@ -158,7 +154,9 @@ class Learner:
                 {
                     "epoch": self.epoch,
                     "epoch_loss": self.e_loss[-1],
-                }
+                },
+                epoch = self.epoch
+               
             )
 
             # early_stopping needs the validation loss to check if it has decreased,
@@ -174,7 +172,7 @@ class Learner:
                 self.save()
 
             gc.collect()
-            print("Task: " + task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
+            print("Task: " + self.task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
             self.epoch += 1
 
         # Update bn statistics for the swa_model at the end
