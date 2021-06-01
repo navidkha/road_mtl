@@ -43,8 +43,7 @@ class TasksManager:
         for task in self._tasks_list:
             print("Task: " + task.get_name() + " started.")
             encoder = ResNet(self._seq_len, pre_trained = True)
-            optim = optim.Adam([encoder.parameters(), task.parameters()], lr=0.003)
-            learner = Learner(cfg_path, self._data_loader, encoder, task, optim, labels_definition=self._labels_definition)
+            learner = Learner(cfg_path, self._data_loader, encoder, task, labels_definition=self._labels_definition)
             acc = learner.train()
             print("Task: " + task.get_name() + " finished. Loss is: " + str(acc))
             task.set_acc_threshold(acc)
