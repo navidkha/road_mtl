@@ -36,6 +36,7 @@ class TasksManager:
 
 
     def run_tasks_single(self):
+        print("Signle task mode")
         encoder = ResNet(self._seq_len, pre_trained = True)
         cfg_path = "./conf/config"
         for task in self._tasks_list:
@@ -47,6 +48,7 @@ class TasksManager:
 
 
     def run_multi_tasks(self):
+        print("Multi task mode")
         encoder = ResNet(self._seq_len, pre_trained=True)
         cfg_path = "./conf/config"
 

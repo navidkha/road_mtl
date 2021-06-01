@@ -83,6 +83,8 @@ class VisionTask:
             box_count = len(labels[i][-1])
             for j in range(min(box_count, VisionTask._max_box_count)):
                 l = labels[i][-1][j] # len(l) = 149
+                if l[0] == 0:
+                    break
                 l = l[self.boundary[0]:self.boundary[1]]
                 if torch.count_nonzero(l) > 0:
                     flat_label = torch.cat((flat_label, one_tensor))

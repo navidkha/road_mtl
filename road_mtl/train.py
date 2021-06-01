@@ -90,13 +90,20 @@ class Learner:
             for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
                 self.optimizer.zero_grad()
 
-                if internel_iter % 100 == 0:
+                if False: 
+                #if internel_iter % 100 == 0:
                     definitions = []
                     box_count = len(gt_labels[-1][-1])
                     for j in range(min(box_count, VisionTask._max_box_count)):
                         l = gt_labels[-1][-1][j]  # len(l) = 149
+                        if l[0] == 0:
+                            break
+                        print(l)
+                        print(str(task.boundary[0]) + ":" + str(task.boundary[1]))
                         l = l[task.boundary[0]:task.boundary[1]]
+                        print(l)
                         label_index = l.argmax()
+                        print("argmax: "+str(label_index)) 
                         definitions.append(self._labels_definition[task.get_name()][label_index])
 
                     print("TEST_list", definitions)
@@ -105,11 +112,11 @@ class Learner:
                     img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
                     img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
                     img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
-                    self.logger.log_image(img, name="name", image_channels='first')
+                    img_with_text = draw_text(img, definitions)
+                    self.logger.log_image(img_with_text, name="name", image_channels='first')
 
 
-
-                # fl = task.get_flat_label(gt_labels)
+                # fl = task.get_flat_label(gt_label)
 
                 # m = nn.Sigmoid()
                 y = task.get_flat_label(gt_labels)
@@ -148,27 +155,36 @@ class Learner:
                 )
 
                 with torch.no_grad():
+                #if True:
                     if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
-                        print("Internel iter: ", internel_iter)
+                    #if internel_iter % 100 == 0:
+                        #print("Internel iter: ", internel_iter)
                         out = out[-1]
                         definitions = []
+                        definitions_just_name = []
+                        
+                        img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
+                        #print(img_name)
                         l = task.boundary[1]-task.boundary[0]
-                        n_boxes = len(gt_boxes[-1][-1])
-                        print("Number of Boxes:", n_boxes)
-                        name = "img_" + str(self.epoch) + "_" + str(internel_iter/1000)
-                        for i in range (n_boxes):
-                            prediction = out[i*l + 1 + i : i*l + l + 1 + i]
-                            prediction = prediction.argmax()
-                            definitions.append(name + ": " + self._labels_definition[task.get_name()][prediction])
-
-                        print("list", definitions)
+                        index = 0
+                        while index < len(out):
+                            go_on = out[index]
+                            index +=1
+                            if go_on == 0:
+                                break
+                            prediction=out[index:index+l]
+                            pred_index = prediction.argmax()
+                            index += l
+                            definitions_just_name.append(self._labels_definition[task.get_name()][pred_index])
+                    
+                        #print("list", definitions)
                         sz = wh[0][0].item()
                         img = torch.zeros([3, sz, sz])
                         img[0] = images[-1][self.cfg.dataloader.seq_len -1]
                         img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
                         img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
-                        img_with_text = draw_text(img, definitions)
-                        self.logger.log_image(img_with_text, name=name, image_channels='first')
+                        img_with_text = draw_text(img, definitions_just_name)
+                        self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
 
 
                 #if internel_iter < 10:
@@ -189,7 +205,7 @@ class Learner:
 
             if self.epoch > self.cfg.train_params.swa_start:
                 self.swa_model.update_parameters(self.model)
-                self.swa_scheduler.step()
+                #self.swa_scheduler.step()
             else:
                 self.lr_scheduler.step()
 
@@ -547,6 +563,3 @@ class Learner:
             save_checkpoint(
                 checkpoint, False, self.cfg.directory.save, save_name
             )
-
-
-
