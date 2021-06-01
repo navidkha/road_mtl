@@ -89,12 +89,12 @@ if __name__ == "__main__":
 
         images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = data_loader.dataset.__getitem__(10)
 
-        if args.MULTI == False:
-            print("--------- Single task run mode selected. --------- ")
-            tasks_manager.run_tasks_single()
-        else:
-            print("--------- Multi task run mode selected. --------- ")
-            tasks_manager.run_multi_tasks()
+        #if args.MULTI == False:
+        #    print("--------- Single task run mode selected. --------- ")
+        tasks_manager.run_tasks_single()
+        #else:
+        #    print("--------- Multi task run mode selected. --------- ")
+        #    tasks_manager.run_multi_tasks()
 
     else:
         args.MAX_SEQ_STEP = 1

@@ -77,6 +77,7 @@ class Learner:
         # stochastic weight averaging
         self.swa_model = AveragedModel(self.model)
 
+
     def train(self, task:VisionTask):
 
         task.go_to_gpu(self.device)
@@ -88,6 +89,25 @@ class Learner:
 
             for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
                 self.optimizer.zero_grad()
+
+                if internel_iter % 100 == 0:
+                    definitions = []
+                    box_count = len(gt_labels[-1][-1])
+                    for j in range(min(box_count, VisionTask._max_box_count)):
+                        l = gt_labels[-1][-1][j]  # len(l) = 149
+                        l = l[task.boundary[0]:task.boundary[1]]
+                        label_index = l.argmax()
+                        definitions.append(self._labels_definition[task.get_name()][label_index])
+
+                    print("TEST_list", definitions)
+                    sz = wh[0][0].item()
+                    img = torch.zeros([3, sz, sz])
+                    img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
+                    img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
+                    img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
+                    self.logger.log_image(img, name="name", image_channels='first')
+
+
 
                 # fl = task.get_flat_label(gt_labels)
 
@@ -147,7 +167,8 @@ class Learner:
                         img[0] = images[-1][self.cfg.dataloader.seq_len -1]
                         img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
                         img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
-                        self.logger.log_image(img, name=name, image_channels='first')
+                        img_with_text = draw_text(img, definitions)
+                        self.logger.log_image(img_with_text, name=name, image_channels='first')
 
 
                 #if internel_iter < 10:
