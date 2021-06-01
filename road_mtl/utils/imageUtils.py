@@ -5,26 +5,34 @@ import numpy as np
 from torchvision import transforms
 
 
-def draw_text(t, text_list):
+def draw_text(img_tensor, text_list_pred, text_list_lbl):
 
-    img = t.permute(1, 2, 0).numpy()
-    img_width = img.shape[1] // 2
+    img = img_tensor.permute(1, 2, 0).numpy()
+    img_width = img.shape[1]
     img = Image.fromarray(
         (((img - img.min()) / (-img.min() + img.max())) * 255).astype(np.uint8)
     )
     draw = ImageDraw.Draw(img)
     # load font
-    font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-L.ttf", size=14)
-    offset = 10
-    step = 30
-    for i in range(len(text_list)):
+    font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-L.ttf", size=11)
+    offset = 5
+    step = 15
+    for i in range(len(text_list_pred)):
         draw.text(
             (offset , offset+ (i*step)),  # Coordinates
-            text_list[i],  # Text
-            (255, 0, 0),  # Color
+            text_list_pred[i],  # Text
+            (0, 255, 0),  # Color
             font=font
         )
-    #return np.asarray(img)
+    print(img_width)
+    offset_x = img_width - 50
+    for i in range(len(text_list_lbl)):
+        draw.text(
+            (offset_x, offset + (i * step)),  # Coordinates
+            text_list_lbl[i],  # Text
+            (0, 0, 255),  # Color
+            font=font
+        )
     return img
 
 

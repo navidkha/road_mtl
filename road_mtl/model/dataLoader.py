@@ -299,7 +299,8 @@ if __name__ == "__main__":
     img_new[1] = clip[2 * seq_len - 1]
     img_new[2] = clip[3 * seq_len - 1]
 
-    ig = draw_text(img_new, ["smm", "zz"])
+    ig = draw_text(img_new, ["pred1", "pred2", "pred3", "pred4", "pred5", "5"],
+                   ["lbl1", "lbl2", "lbl3", "lbl4", "lbl5", "5"])
     plt.imshow(ig)
     plt.show()
 
