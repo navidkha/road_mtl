@@ -90,34 +90,6 @@ class Learner:
             for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
                 self.optimizer.zero_grad()
 
-                if False: 
-                #if internel_iter % 100 == 0:
-                    definitions = []
-                    box_count = len(gt_labels[-1][-1])
-                    for j in range(min(box_count, VisionTask._max_box_count)):
-                        l = gt_labels[-1][-1][j]  # len(l) = 149
-                        if l[0] == 0:
-                            break
-                        print(l)
-                        print(str(task.boundary[0]) + ":" + str(task.boundary[1]))
-                        l = l[task.boundary[0]:task.boundary[1]]
-                        print(l)
-                        label_index = l.argmax()
-                        print("argmax: "+str(label_index)) 
-                        definitions.append(self._labels_definition[task.get_name()][label_index])
-
-                    print("TEST_list", definitions)
-                    sz = wh[0][0].item()
-                    img = torch.zeros([3, sz, sz])
-                    img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
-                    img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
-                    img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
-                    img_with_text = draw_text(img, definitions)
-                    self.logger.log_image(img_with_text, name="name", image_channels='first')
-
-
-                # fl = task.get_flat_label(gt_label)
-
                 # m = nn.Sigmoid()
                 y = task.get_flat_label(gt_labels)
                 x = images
@@ -156,52 +128,13 @@ class Learner:
 
                 with torch.no_grad():
                 #if True:
-                    if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
-                    #if internel_iter % 100 == 0:
-                        #print("Internel iter: ", internel_iter)
-                        out = out[-1]
-                        definitions = []
-                        definitions_just_name = []
-                        
+                    if internel_iter % 400 == 0 and self.epoch % 3 == 0:
                         img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
-                        #print(img_name)
-                        l = task.boundary[1]-task.boundary[0]
-                        index = 0
-                        while index < len(out):
-                            go_on = out[index]
-                            index +=1
-                            if go_on == 0:
-                                break
-                            prediction=out[index:index+l]
-                            pred_index = prediction.argmax()
-                            index += l
-                            definitions_just_name.append(self._labels_definition[task.get_name()][pred_index])
-                    
-                        #print("list", definitions)
-                        sz = wh[0][0].item()
-                        img = torch.zeros([3, sz, sz])
-                        img[0] = images[-1][self.cfg.dataloader.seq_len -1]
-                        img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
-                        img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
-                        img_with_text = draw_text(img, definitions_just_name)
-                        self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
-
-
-                #if internel_iter < 10:
-                #    sz = wh[0][0].item()
-                #    img = torch.zeros([3, sz, sz])
-                #    print(img.shape)
-                #    print(images.shape)
-                #    img[0] = images[-1][self.cfg.dataloader.seq_len -1]
-                #    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
-                #    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
-                #    self.log_image_with_text_on_it(img, gt_labels[-1][-1], task)
-                    #self.logger.log_image(img, name="v", image_channels='first')
+                        self.visualize(images=images, labels=gt_labels, task=task,
+                                       output=out, img_name=img_name, img_size=wh[0][0].item())
 
             #bar.close()
             
-            # Visualize
-            # self.predict_visualize(index_list=visualize_idx, task=task)
 
             if self.epoch > self.cfg.train_params.swa_start:
                 self.swa_model.update_parameters(self.model)
@@ -395,59 +328,85 @@ class Learner:
         print("Training Finished!")
         return primary_loss
 
-    def predict_visualize(self, index_list, task):
-        print("===================================================")
-        for i in index_list:
-            images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = self.data.dataset.__getitem__(i)
-            sz = img_indexs[0]
+    def visualize(self, images, labels, task, output, img_name, img_size):
 
-            y = task.get_flat_label(gt_labels)
-            x = images
+        # 1- prepare image
+        img = torch.zeros([3, img_size, img_size])
+        img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
+        img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
+        img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
 
-            # move data to device
-            x = x.to(device=self.device)
-            y = y.to(device=self.device)
+        # 2- find predictions definitions
+        out = output[-1]
+        definitions_pred = []
 
-            encoded_vector = self.model(x)
-            out = task.decode(encoded_vector)
-            self.log_image_with_text(img_tensor=images, out_vector=out, index=i, task=task)
-        print("===================================================")
-
-    def log_image_with_text(self, img_tensor, out_vector, index, task):
-        definitions = []
-        label_len = task.boundary[1]-task.boundary[0]
-        name = "img_" + str(index)
-        i = 0
-        while True:
-            finished = out_vector[i]
-            if finished == True:
+        l = task.boundary[1] - task.boundary[0]
+        index = 0
+        while index < len(out):
+            go_on = out[index]
+            index += 1
+            if go_on == 0:
                 break
-            i += 1
+            prediction = out[index:index + l]
+            pred_index = prediction.argmax()
+            index += l
+            definitions_pred.append(self._labels_definition[task.get_name()][pred_index])
+        definitions_pred.append(str(len(definitions_pred)))
+        print("prediction size: ", len(definitions_pred))
 
-            l = out_vector[i, label_len]
-            i += label_len
-            if len(np.nonzero(l)) > 0:
-                definition_idx = np.nonzero(l)[0][0]
-                definitions.append(name + ": " + self._labels_definition[task.get_name()][definition_idx])
-
-        print(definitions)
-        self.logger.log_image(img_tensor, name=name, image_channels='first')
-
-
-    def log_image_with_text_on_it(self, img_tensor, labels, task):
-        definitions = []
-        box_count = len(labels)
+        # 3- draw labels definitions
+        definitions_lbl = []
+        box_count = len(labels[-1][-1])
         for j in range(min(box_count, VisionTask._max_box_count)):
-            l = labels[j]  # len(l) = 149
+            l = labels[-1][-1][j]  # len(l) = 149
+            if l[0] == 0:
+                break
             l = l[task.boundary[0]:task.boundary[1]]
-            if len(np.nonzero(l)) > 0:
-                definition_idx = np.nonzero(l)[0][0]
-                definitions.append(self._labels_definition[task.get_name()][definition_idx])
+            label_index = l.argmax()
+            definitions_lbl.append(self._labels_definition[task.get_name()][label_index])
+        definitions_lbl.append(str(len(definitions_lbl)))
+        print("label size: ", len(definitions_lbl))
 
-        img = draw_text(img_tensor, definitions)
-        print(definitions)
-        # print(images.shape)
-        self.logger.log_image(img_tensor, name="v", image_channels='first')
+        # 4- draw both definitions
+        img_with_text = draw_text(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl)
+        self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
+
+
+    # def log_image_with_text(self, img_tensor, out_vector, index, task):
+    #     definitions = []
+    #     label_len = task.boundary[1]-task.boundary[0]
+    #     name = "img_" + str(index)
+    #     i = 0
+    #     while True:
+    #         finished = out_vector[i]
+    #         if finished == True:
+    #             break
+    #         i += 1
+    #
+    #         l = out_vector[i, label_len]
+    #         i += label_len
+    #         if len(np.nonzero(l)) > 0:
+    #             definition_idx = np.nonzero(l)[0][0]
+    #             definitions.append(name + ": " + self._labels_definition[task.get_name()][definition_idx])
+    #
+    #     print(definitions)
+    #     self.logger.log_image(img_tensor, name=name, image_channels='first')
+    #
+    #
+    # def log_image_with_text_on_it(self, img_tensor, labels, task):
+    #     definitions = []
+    #     box_count = len(labels)
+    #     for j in range(min(box_count, VisionTask._max_box_count)):
+    #         l = labels[j]  # len(l) = 149
+    #         l = l[task.boundary[0]:task.boundary[1]]
+    #         if len(np.nonzero(l)) > 0:
+    #             definition_idx = np.nonzero(l)[0][0]
+    #             definitions.append(self._labels_definition[task.get_name()][definition_idx])
+    #
+    #     img = draw_text(img_tensor, definitions)
+    #     print(definitions)
+    #     # print(images.shape)
+    #     self.logger.log_image(img_tensor, name="v", image_channels='first')
 
 
     # @timeit
