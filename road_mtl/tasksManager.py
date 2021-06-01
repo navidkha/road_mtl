@@ -38,11 +38,14 @@ class TasksManager:
     def run_tasks_single(self):
         print("Signle task mode")
         encoder = ResNet(self._seq_len, pre_trained = True)
+        
         cfg_path = "./conf/config"
         for task in self._tasks_list:
             print("Task: " + task.get_name() + " started.")
-            learner = Learner(cfg_path, self._data_loader, encoder, labels_definition=self._labels_definition)
-            acc = learner.train(task)
+            encoder = ResNet(self._seq_len, pre_trained = True)
+            optim = optim.Adam([encoder.parameters(), task.parameters()], lr=0.003)
+            learner = Learner(cfg_path, self._data_loader, encoder, task, optim, labels_definition=self._labels_definition)
+            acc = learner.train()
             print("Task: " + task.get_name() + " finished. Loss is: " + str(acc))
             task.set_acc_threshold(acc)
 
