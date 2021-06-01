@@ -21,7 +21,7 @@ def draw_text(img_tensor, text_list_pred, text_list_lbl):
         draw.text(
             (offset , offset+ (i*step)),  # Coordinates
             text_list_pred[i],  # Text
-            (0, 255, 0),  # Color
+            (255, 0, 0),  # Color
             font=font
         )
     print(img_width)
@@ -30,7 +30,7 @@ def draw_text(img_tensor, text_list_pred, text_list_lbl):
         draw.text(
             (offset_x, offset + (i * step)),  # Coordinates
             text_list_lbl[i],  # Text
-            (0, 0, 255),  # Color
+            (0, 255, 0),  # Color
             font=font
         )
     return img
