@@ -1,9 +1,9 @@
-import gc
-import sys
-from datetime import datetime
-from pathlib import Path
-
 import comet_ml
+import gc
+from pathlib import Path
+from datetime import datetime
+import sys
+from comet_ml.connection import pending_rpcs_url
 import torch.nn as nn
 
 from tasks.visionTask import VisionTask
@@ -15,41 +15,44 @@ except:
     raise RuntimeError("Can't append root directory of the project the path")
 
 import numpy as np
+from tqdm import tqdm
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.optim.swa_utils import AveragedModel
+from torch.optim.swa_utils import AveragedModel, SWALR
 
+from model.net import CustomModel
 #from model.data_loader import CustomDataset, CustomDatasetVal
-from utils.nn import check_grad_norm, EarlyStopping
+from utils.nn import check_grad_norm, init_weights_normal, EarlyStopping, op_counter
 from utils.io import save_checkpoint, load_checkpoint
-from utils.utility import get_conf
-
+from utils.utility import get_conf, timeit
+import random
 
 class Learner:
-    def __init__(self, cfg_dir: str, data_loader:DataLoader, encoder, decoder, labels_definition):
+    def __init__(self, cfg_dir: str, data_loader:DataLoader, model, labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
+        #TODO
         self.logger = self.init_logger(self.cfg.logger)
-        self.task = decoder
+        #self.dataset = CustomDataset(**self.cfg.dataset)
         self.data = data_loader
-        self.model = encoder
-        self.decoder = decoder.mlp
-        self.sig = nn.Sigmoid()
+        #self.val_dataset = CustomDatasetVal(**self.cfg.val_dataset)
+        #self.val_data = DataLoader(self.val_dataset, **self.cfg.dataloader)
+        # self.logger.log_parameters({"tr_len": len(self.dataset),
+        #                             "val_len": len(self.val_dataset)})
+        self.model = model
         #self.model._resnet.conv1.apply(init_weights_normal)
         self.device = self.cfg.train_params.device
         self.model = self.model.to(device=self.device)
-        self.decoder = self.decoder.to(device=self.device)
         if self.cfg.train_params.optimizer.lower() == "adam":
-            params = list(self.model.parameters()) + list(self.decoder.parameters())
-            self.optimizer = optim.Adam(params, **self.cfg.adam)
+            self.optimizer = optim.Adam(self.model.parameters(), **self.cfg.adam)
         elif self.cfg.train_params.optimizer.lower() == "rmsprop":
-            self.optimizer = optim.RMSprop([self.model.parameters(), self.decoder.parameters()], **self.cfg.rmsprop)
+            self.optimizer = optim.RMSprop(self.model.parameters(), **self.cfg.rmsprop)
         else:
             raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
 
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion = nn.L1Loss()
+        self.criterion = nn.BCELoss()
 
         if self.cfg.logger.resume:
             # load checkpoint
@@ -81,20 +84,25 @@ class Learner:
 
         # stochastic weight averaging
         self.swa_model = AveragedModel(self.model)
+        self.swa_scheduler = SWALR(self.optimizer, **self.cfg.SWA)
 
+    def train(self, task:VisionTask):
+        task.go_to_gpu(self.device)
 
-    def train(self):
-
+        visualize_idx = np.random.randint(0, len(self.data), 50)
 
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
-            self.logger.set_epoch(self.epoch)
 
-            for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
+            for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
+                self.optimizer.zero_grad()
 
-                # m = nn.Sigmoid()
-                y = self.task.get_flat_label(gt_labels)
+                # fl = task.get_flat_label(gt_labels)
+
+                m = nn.Sigmoid()
+                y = task.get_flat_label(gt_labels)
+                x = images
 
 
                 # move data to device
@@ -103,11 +111,9 @@ class Learner:
 
                 # forward, backward
                 encoded_vector = self.model(x)
-                out = self.decoder(encoded_vector)
-                loss = self.criterion(self.sig(out), y)
-                self.optimizer.zero_grad()
+                out = task.decode(encoded_vector)
+                loss = self.criterion(m(out), y)
                 loss.backward()
-
                 # check grad norm for debugging
                 grad_norm = check_grad_norm(self.model)
                 # update
@@ -121,23 +127,58 @@ class Learner:
                 self.logger.log_metrics(
                     {
                     #"epoch": self.epoch,
+                    "batch": internel_iter,
                     "loss": loss.item(),
                     "GradNorm": grad_norm,
                     },
                     epoch=self.epoch
                 )
 
-                with torch.no_grad():
-                    #if internel_iter % 400 == 0 and self.epoch % 3 == 0:
-                    if internel_iter % 10 == 0:
-                        img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
-                        self.visualize(images=x, labels=gt_labels, task= self.task,
-                                       output=out, img_name=img_name, img_size=wh[0][0].item())
+
+                #validation
+                if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
+                    print("Internel iter: ", internel_iter)
+                    out = m(out[-1])
+                    definitions = []
+                    l = task.boundary[1]-task.boundary[0]
+                    n_boxes = len(gt_boxes[-1][-1])
+                    print("Number of Boxes:", n_boxes)
+                    name = "img_" + str(self.epoch) + "_" + str(internel_iter/1000)
+                    for i in range (n_boxes):
+                        prediction = out[i*l + 1 + i : i*l + l + 1 + i]
+                        prediction = prediction.argmax()
+                        definitions.append(name + ": " + self._labels_definition[task.get_name()][prediction])
+                        
+                    print("list", definitions)
+                    sz = wh[0][0].item()    
+                    img = torch.zeros([3, sz, sz])
+                    img[0] = images[-1][self.cfg.dataloader.seq_len -1]
+                    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
+                    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
+                    self.logger.log_image(img, name=name, image_channels='first')
+
+
+                #if internel_iter < 10:
+                #    sz = wh[0][0].item()
+                #    img = torch.zeros([3, sz, sz])
+                #    print(img.shape)
+                #    print(images.shape)
+                #    img[0] = images[-1][self.cfg.dataloader.seq_len -1]
+                #    img[1] = images[-1][2*self.cfg.dataloader.seq_len - 1]
+                #    img[2] = images[-1][3*self.cfg.dataloader.seq_len - 1]
+                #    self.log_image_with_text_on_it(img, gt_labels[-1][-1], task)
+                    #self.logger.log_image(img, name="v", image_channels='first')
 
             #bar.close()
             
-           
-            self.lr_scheduler.step()
+            # Visualize
+            # self.predict_visualize(index_list=visualize_idx, task=task)
+
+            if self.epoch > self.cfg.train_params.swa_start:
+                self.swa_model.update_parameters(self.model)
+                self.swa_scheduler.step()
+            else:
+                self.lr_scheduler.step()
 
             # validate on val set
             # val_loss, t = self.validate()
@@ -154,9 +195,7 @@ class Learner:
                 {
                     "epoch": self.epoch,
                     "epoch_loss": self.e_loss[-1],
-                },
-                epoch = self.epoch
-               
+                }
             )
 
             # early_stopping needs the validation loss to check if it has decreased,
@@ -172,7 +211,7 @@ class Learner:
                 self.save()
 
             gc.collect()
-            print("Task: " + self.task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
+            print("Task: " + task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
             self.epoch += 1
 
         # Update bn statistics for the swa_model at the end
@@ -327,88 +366,59 @@ class Learner:
         print("Training Finished!")
         return primary_loss
 
-    def visualize(self, images, labels, task, output, img_name, img_size):
+    def predict_visualize(self, index_list, task):
+        print("===================================================")
+        for i in index_list:
+            images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = self.data.dataset.__getitem__(i)
+            sz = img_indexs[0]
 
-        # 1- prepare image
-        img = torch.zeros([3, img_size, img_size])
-        img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
-        img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
-        img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
+            y = task.get_flat_label(gt_labels)
+            x = images
 
-        # 2- find predictions definitions
-        out = self.sig(output[-1])
-        #print("out:")
-        #print(out)
-        definitions_pred = ["size"]
+            # move data to device
+            x = x.to(device=self.device)
+            y = y.to(device=self.device)
 
-        l = task.boundary[1] - task.boundary[0]
-        index = 0
-        while index < len(out):
-            go_on = out[index]
-            index += 1
-            if go_on <= 0.5:
-                index += l
-                continue
-            prediction = out[index:index + l]
-            pred_index = prediction.argmax()
-            index += l
-            definitions_pred.append(self._labels_definition[task.get_name()][pred_index])
-        print("prediction size: ", len(definitions_pred)-1)
-        definitions_pred[0] = str(len(definitions_pred)-1)
+            encoded_vector = self.model(x)
+            out = task.decode(encoded_vector)
+            self.log_image_with_text(img_tensor=images, out_vector=out, index=i, task=task)
+        print("===================================================")
 
-        # 3- draw labels definitions
-        definitions_lbl = ["size"]
-        box_count = len(labels[-1][-1])
-        for j in range(min(box_count, VisionTask._max_box_count)):
-            l = labels[-1][-1][j]  # len(l) = 149
-            if l[0] == 0:
+    def log_image_with_text(self, img_tensor, out_vector, index, task):
+        definitions = []
+        label_len = task.boundary[1]-task.boundary[0]
+        name = "img_" + str(index)
+        i = 0
+        while True:
+            finished = out_vector[i]
+            if finished == True:
                 break
+            i += 1
+
+            l = out_vector[i, label_len]
+            i += label_len
+            if len(np.nonzero(l)) > 0:
+                definition_idx = np.nonzero(l)[0][0]
+                definitions.append(name + ": " + self._labels_definition[task.get_name()][definition_idx])
+
+        print(definitions)
+        self.logger.log_image(img_tensor, name=name, image_channels='first')
+
+
+    def log_image_with_text_on_it(self, img_tensor, labels, task):
+        definitions = []
+        box_count = len(labels)
+        for j in range(min(box_count, VisionTask._max_box_count)):
+            l = labels[j]  # len(l) = 149
             l = l[task.boundary[0]:task.boundary[1]]
-            label_index = l.argmax()
-            definitions_lbl.append(self._labels_definition[task.get_name()][label_index])
-        print("label size: ", len(definitions_lbl)-1)
-        definitions_lbl[0] = str(len(definitions_lbl)-1)
+            if len(np.nonzero(l)) > 0:
+                definition_idx = np.nonzero(l)[0][0]
+                definitions.append(self._labels_definition[task.get_name()][definition_idx])
 
-        # 4- draw both definitions
-        img_with_text = draw_text(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl)
-        self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
-
-
-    # def log_image_with_text(self, img_tensor, out_vector, index, task):
-    #     definitions = []
-    #     label_len = task.boundary[1]-task.boundary[0]
-    #     name = "img_" + str(index)
-    #     i = 0
-    #     while True:
-    #         finished = out_vector[i]
-    #         if finished == True:
-    #             break
-    #         i += 1
-    #
-    #         l = out_vector[i, label_len]
-    #         i += label_len
-    #         if len(np.nonzero(l)) > 0:
-    #             definition_idx = np.nonzero(l)[0][0]
-    #             definitions.append(name + ": " + self._labels_definition[task.get_name()][definition_idx])
-    #
-    #     print(definitions)
-    #     self.logger.log_image(img_tensor, name=name, image_channels='first')
-    #
-    #
-    # def log_image_with_text_on_it(self, img_tensor, labels, task):
-    #     definitions = []
-    #     box_count = len(labels)
-    #     for j in range(min(box_count, VisionTask._max_box_count)):
-    #         l = labels[j]  # len(l) = 149
-    #         l = l[task.boundary[0]:task.boundary[1]]
-    #         if len(np.nonzero(l)) > 0:
-    #             definition_idx = np.nonzero(l)[0][0]
-    #             definitions.append(self._labels_definition[task.get_name()][definition_idx])
-    #
-    #     img = draw_text(img_tensor, definitions)
-    #     print(definitions)
-    #     # print(images.shape)
-    #     self.logger.log_image(img_tensor, name="v", image_channels='first')
+        img = draw_text(img_tensor, definitions)
+        print(definitions)
+        # print(images.shape)
+        self.logger.log_image(img_tensor, name="v", image_channels='first')
 
 
     # @timeit
@@ -524,3 +534,6 @@ class Learner:
             save_checkpoint(
                 checkpoint, False, self.cfg.directory.save, save_name
             )
+
+
+

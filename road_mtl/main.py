@@ -63,6 +63,8 @@ if __name__ == "__main__":
                         type=int, help='Number of threads')
     parser.add_argument('--DEBUG', default=False,
                         type=bool, help='Is debug mode')
+    parser.add_argument('--MULTI', default=False,
+                        type=bool, help='Is multi task learning mode')
 
     args = parser.parse_args()
     args = utils.set_args(args)  # set SUBSETS of datasets
