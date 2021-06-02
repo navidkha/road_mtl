@@ -49,7 +49,7 @@ class Learner:
             raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
 
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion = nn.L1Loss()
+        self.criterion = nn.BCELoss()
 
         if self.cfg.logger.resume:
             # load checkpoint
