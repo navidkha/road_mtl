@@ -33,6 +33,7 @@ class Learner:
         self.logger = self.init_logger(self.cfg.logger)
         self.data = data_loader
         self.model = model
+        self.sig = nn.Sigmoid()
         #self.model._resnet.conv1.apply(init_weights_normal)
         self.device = self.cfg.train_params.device
         self.model = self.model.to(device=self.device)
@@ -90,10 +91,8 @@ class Learner:
             for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
                 self.optimizer.zero_grad()
 
-                # m = nn.Sigmoid()
                 y = task.get_flat_label(gt_labels)
                 x = images
-
 
                 # move data to device
                 x = x.to(device=self.device)
@@ -102,7 +101,7 @@ class Learner:
                 # forward, backward
                 encoded_vector = self.model(x)
                 out = task.decode(encoded_vector)
-                loss = self.criterion(out, y)
+                loss = self.criterion(self.sig(out), y)
                 self.optimizer.zero_grad()
                 loss.backward()
 
@@ -127,8 +126,8 @@ class Learner:
                 )
 
                 with torch.no_grad():
-                #if True:
-                    if internel_iter % 400 == 0 and self.epoch % 3 == 0:
+                    #if internel_iter % 400 == 0 and self.epoch % 3 == 0:
+                    if internel_iter % 20 == 0:
                         img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
                         self.visualize(images=images, labels=gt_labels, task=task,
                                        output=out, img_name=img_name, img_size=wh[0][0].item())
@@ -337,25 +336,26 @@ class Learner:
         img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
 
         # 2- find predictions definitions
-        out = output[-1]
-        definitions_pred = []
+        out = self.sig(output[-1])
+        definitions_pred = ["size"]
 
         l = task.boundary[1] - task.boundary[0]
         index = 0
         while index < len(out):
             go_on = out[index]
             index += 1
-            if go_on == 0:
-                break
+            if go_on <= 0.5:
+                index += l
+                continue
             prediction = out[index:index + l]
             pred_index = prediction.argmax()
             index += l
             definitions_pred.append(self._labels_definition[task.get_name()][pred_index])
-        definitions_pred.append(str(len(definitions_pred)))
-        print("prediction size: ", len(definitions_pred))
+        print("prediction size: ", len(definitions_pred)-1)
+        definitions_pred[0] = str(len(definitions_pred)-1)
 
         # 3- draw labels definitions
-        definitions_lbl = []
+        definitions_lbl = ["size"]
         box_count = len(labels[-1][-1])
         for j in range(min(box_count, VisionTask._max_box_count)):
             l = labels[-1][-1][j]  # len(l) = 149
@@ -364,8 +364,8 @@ class Learner:
             l = l[task.boundary[0]:task.boundary[1]]
             label_index = l.argmax()
             definitions_lbl.append(self._labels_definition[task.get_name()][label_index])
-        definitions_lbl.append(str(len(definitions_lbl)))
-        print("label size: ", len(definitions_lbl))
+        print("label size: ", len(definitions_lbl)-1)
+        definitions_lbl[0] = str(len(definitions_lbl)-1)
 
         # 4- draw both definitions
         img_with_text = draw_text(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl)
