@@ -53,7 +53,7 @@ class VisionTask:
         #mlp = make_mlp(self.decode_dims, self.decode_activation_function)
         return self.mlp(encoded_vec)
 
-    def set_acc_threshold(self, acc, logger):
+    def set_acc_threshold(self, acc):
         self._acc_threshold = acc
         #TODO store on file
         stat =  self.task_name + ": " + str(acc)
