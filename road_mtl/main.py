@@ -86,16 +86,8 @@ if __name__ == "__main__":
 
         tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN,
                                      labels_definition=data_set.get_labels_definition())
-
-        images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = data_loader.dataset.__getitem__(10)
-
-        #print(args)
-        #if args.MULTI == False:
-        print("--------- Start running single task. --------- ")
         tasks_manager.run_tasks_single()
-        #else:
-        #print("--------- Start running multi task. --------- ")
-        #tasks_manager.run_multi_tasks()
+        tasks_manager.run_multi_tasks()
 
     else:
         args.MAX_SEQ_STEP = 1
