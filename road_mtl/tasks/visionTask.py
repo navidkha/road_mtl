@@ -28,7 +28,8 @@ class VisionTask:
             self.boundary = [81, 149]
 
         # update decode dims last part to output_max_size instead of it's real value.
-        self._output_max_size = (self.boundary[1] - self.boundary[0] + 1) * self._max_box_count  
+        # +4 for box size
+        self._output_max_size = (self.boundary[1] - self.boundary[0] + 1 + 4) * self._max_box_count
         self.decode_dims[-1] = self._output_max_size 
 
         # stores accuracy of task when it trained as single task.
@@ -70,7 +71,7 @@ class VisionTask:
     def is_primary(self):
         return self._is_primary_task
 
-    def get_flat_label(self, labels):
+    def get_flat_label(self, labels, boxes):
         # labels dhape is [batch_size, seq_len, box_count, long_label] e.g [4,8,13,149]
 
         zero_tensor = torch.tensor([0])
@@ -83,6 +84,7 @@ class VisionTask:
             box_count = len(labels[i][-1])
             for j in range(min(box_count, VisionTask._max_box_count)):
                 l = labels[i][-1][j] # len(l) = 149
+                b = boxes[i][-1][j] # len(b) always is 4
                 if l[0] == 0:
                     break
                 l = l[self.boundary[0]:self.boundary[1]]
@@ -91,7 +93,10 @@ class VisionTask:
                 else:
                     flat_label = torch.cat((flat_label, zero_tensor))
 
+                # append label
                 flat_label = torch.cat((flat_label, l))
+                # append box
+                flat_label = torch.cat((flat_label, b))
         
             for k in range (self._output_max_size - len(flat_label)):
                 flat_label = torch.cat((flat_label, zero_tensor))

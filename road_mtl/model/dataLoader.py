@@ -15,7 +15,7 @@ from tasks.taskCreator import TaskCreator
 
 import model.transforms as vtf
 from tasks.taskNames import VisionTaskName
-from utils.imageUtils import draw_text
+from utils.imageUtils import  draw_text_box
 from utils.printUtility import print_warn
 
 IMAGE_HEIGHT = 224
@@ -299,8 +299,9 @@ if __name__ == "__main__":
     img_new[1] = clip[2 * seq_len - 1]
     img_new[2] = clip[3 * seq_len - 1]
 
-    ig = draw_text(img_new, ["pred1", "pred2", "pred3", "pred4", "pred5", "5"],
-                   ["lbl1", "lbl2", "lbl3", "lbl4", "lbl5", "5"])
+    b_p = [[50,100,70,150]]
+    b_r = [[10,20,30,70]]
+    ig = draw_text_box(img_new, ["pred1"], ["lbl1"], b_p, b_r)
     plt.imshow(ig)
     plt.show()
 

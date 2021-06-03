@@ -131,7 +131,7 @@ class Learner:
                     #if internel_iter % 400 == 0 and self.epoch % 3 == 0:
                     if internel_iter % 10 == 0:
                         img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
-                        self.visualize(images=x, labels=gt_labels, task= self.task,
+                        self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task= self.task,
                                        output=out, img_name=img_name, img_size=wh[0][0].item())
 
             #bar.close()
@@ -327,8 +327,9 @@ class Learner:
         print("Training Finished!")
         return primary_loss
 
-    def visualize(self, images, labels, task, output, img_name, img_size):
+    def visualize(self, images, labels, boxes, task, output, img_name, img_size):
 
+        box_size = 4
         # 1- prepare image
         img = torch.zeros([3, img_size, img_size])
         img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
@@ -337,40 +338,49 @@ class Learner:
 
         # 2- find predictions definitions
         out = self.sig(output[-1])
-        #print("out:")
-        #print(out)
         definitions_pred = ["size"]
+        boxes_pred = []
 
         l = task.boundary[1] - task.boundary[0]
         index = 0
         while index < len(out):
+            # read flag
             go_on = out[index]
             index += 1
             if go_on <= 0.5:
                 index += l
                 continue
+            # read label prediction
             prediction = out[index:index + l]
             pred_index = prediction.argmax()
             index += l
             definitions_pred.append(self._labels_definition[task.get_name()][pred_index])
+            # read box prediction
+            boxes_pred.append(out[index:box_size])
+
         print("prediction size: ", len(definitions_pred)-1)
         definitions_pred[0] = str(len(definitions_pred)-1)
 
         # 3- draw labels definitions
         definitions_lbl = ["size"]
+        boxes_lbl = []
         box_count = len(labels[-1][-1])
         for j in range(min(box_count, VisionTask._max_box_count)):
             l = labels[-1][-1][j]  # len(l) = 149
+            b = boxes[-1][-1][j]   # len(b) = 4 always
             if l[0] == 0:
                 break
             l = l[task.boundary[0]:task.boundary[1]]
             label_index = l.argmax()
             definitions_lbl.append(self._labels_definition[task.get_name()][label_index])
+            boxes_lbl.append(b)
+
         print("label size: ", len(definitions_lbl)-1)
         definitions_lbl[0] = str(len(definitions_lbl)-1)
 
         # 4- draw both definitions
-        img_with_text = draw_text(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl)
+        img_with_text = draw_text_box(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl
+                                      , box_list_lbl=boxes_lbl, box_list_pred=boxes_pred)
         self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
 
 

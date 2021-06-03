@@ -5,7 +5,11 @@ import numpy as np
 from torchvision import transforms
 
 
-def draw_text(img_tensor, text_list_pred, text_list_lbl):
+def _list_to_tuple(lst):
+    # lst.len is 4
+    return ((lst[0], lst[1]), ) + ((lst[2], lst[3]), )
+
+def draw_text_box(img_tensor, text_list_pred, text_list_lbl, box_list_pred, box_list_lbl):
 
     img = img_tensor.permute(1, 2, 0).numpy()
     img_width = img.shape[1]
@@ -15,24 +19,33 @@ def draw_text(img_tensor, text_list_pred, text_list_lbl):
     draw = ImageDraw.Draw(img)
     # load font
     font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-L.ttf", size=11)
-    offset = 5
-    step = 15
+    color_pred = (255, 0, 0)
+
+    cords_pred = []
+    for i in range(len(box_list_pred)):
+        cords_pred.append(_list_to_tuple(box_list_pred[i]))
+
     for i in range(len(text_list_pred)):
         draw.text(
-            (offset , offset+ (i*step)),  # Coordinates
+            (cords_pred[i][0][0], cords_pred[i][1][1]),  # Coordinates
             text_list_pred[i],  # Text
-            (255, 0, 0),  # Color
+            color_pred,  # Color
             font=font
         )
-    print(img_width)
-    offset_x = img_width - 50
+        draw.rectangle(_list_to_tuple(box_list_pred[i]), outline=color_pred)
+
+    cords_lbl = []
+    for i in range(len(box_list_lbl)):
+        cords_lbl.append(_list_to_tuple(box_list_lbl[i]))
+    color_lbl = (0, 255, 0)
     for i in range(len(text_list_lbl)):
         draw.text(
-            (offset_x, offset + (i * step)),  # Coordinates
+            (cords_lbl[i][0][0], cords_lbl[i][1][1]),  # Coordinates
             text_list_lbl[i],  # Text
-            (0, 255, 0),  # Color
+            color_lbl,  # Color
             font=font
         )
+        draw.rectangle(cords_lbl[i], outline=color_lbl)
     return img
 
 
