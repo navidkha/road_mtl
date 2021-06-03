@@ -49,7 +49,7 @@ class Learner:
             raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
 
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion = nn.L1Loss()
+        self.criterion = nn.BCELoss()
 
         if self.cfg.logger.resume:
             # load checkpoint
@@ -93,6 +93,9 @@ class Learner:
 
             for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
 
+                print("________________shape_____________")
+                print(gt_boxes.shape)
+
                 # m = nn.Sigmoid()
                 y = self.task.get_flat_label(gt_labels)
 
@@ -110,26 +113,29 @@ class Learner:
 
                 # check grad norm for debugging
                 grad_norm = check_grad_norm(self.model)
+                grad_norm_decoder = check_grad_norm(self.decoder)
                 # update
                 self.optimizer.step()
 
                 running_loss.append(loss.item())
 
-                #print("Loss:", loss.item())
-                #print("grad_norm", grad_norm)
+                print("Loss:", loss.item())
+                print("grad_norm_encoder", grad_norm)
+                print("grad_norm_decoder", grad_norm_decoder)
 
                 self.logger.log_metrics(
                     {
                     #"epoch": self.epoch,
                     "loss": loss.item(),
-                    "GradNorm": grad_norm,
+                    "GradNormEncoder": grad_norm,
+                    "GradNormDecoder": grad_norm_decoder,
                     },
                     epoch=self.epoch
                 )
 
                 with torch.no_grad():
-                    #if internel_iter % 400 == 0 and self.epoch % 3 == 0:
-                    if internel_iter % 10 == 0:
+                    if internel_iter % 200 == 0 and self.epoch % 3 == 0:
+                    #if internel_iter % 10 == 0:
                         img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
                         self.visualize(images=x, labels=gt_labels, task= self.task,
                                        output=out, img_name=img_name, img_size=wh[0][0].item())
