@@ -27,12 +27,13 @@ from utils.utility import get_conf
 
 
 class Learner:
-    def __init__(self, cfg_dir: str, data_loader:DataLoader, encoder, decoder, labels_definition):
+    def __init__(self, cfg_dir: str, data_loader_train:DataLoader, data_loader_val: DataLoader, encoder, decoder, labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
         self.logger = self.init_logger(self.cfg.logger)
         self.task = decoder
-        self.data = data_loader
+        self.data_train = data_loader_train
+        self.data_val = data_loader_val
         self.model = encoder
         self.decoder = decoder.mlp
         self.sig = nn.Sigmoid()
@@ -49,7 +50,8 @@ class Learner:
             raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
 
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion = nn.BCELoss()
+        self.criterion_lbl = nn.BCELoss()
+        self.criterion_box = nn.MSELoss()
 
         if self.cfg.logger.resume:
             # load checkpoint
@@ -91,23 +93,30 @@ class Learner:
             self.model.train()
             self.logger.set_epoch(self.epoch)
 
-            for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data):
-
-                print("________________shape_____________")
-                print(gt_boxes.shape)
+            for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data_train):
 
                 # m = nn.Sigmoid()
-                y = self.task.get_flat_label(gt_labels)
+                y_lbl = self.task.get_flat_label(labels=gt_labels)
+                y_box = self.task.get_flat_boxes(boxes=gt_boxes)
 
 
                 # move data to device
                 x = x.to(device=self.device)
-                y = y.to(device=self.device)
+                y_lbl = y_lbl.to(device=self.device)
+                y_box = y_box.to(device=self.device)
 
                 # forward, backward
                 encoded_vector = self.model(x)
                 out = self.decoder(encoded_vector)
-                loss = self.criterion(self.sig(out), y)
+
+                #print(out.shape)
+                #print(y_lbl.shape)
+                #print(y_box.shape)
+                #print(out[:,-VisionTask._output_box_max_size:].shape)
+
+                loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
+                loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+                loss = loss_lbl + loss_box
                 self.optimizer.zero_grad()
                 loss.backward()
 
@@ -119,9 +128,9 @@ class Learner:
 
                 running_loss.append(loss.item())
 
-                print("Loss:", loss.item())
-                print("grad_norm_encoder", grad_norm)
-                print("grad_norm_decoder", grad_norm_decoder)
+                #print("Loss:", loss.item())
+                #print("grad_norm_encoder", grad_norm)
+                #print("grad_norm_decoder", grad_norm_decoder)
 
                 self.logger.log_metrics(
                     {
@@ -134,10 +143,10 @@ class Learner:
                 )
 
                 with torch.no_grad():
-                    if internel_iter % 200 == 0 and self.epoch % 3 == 0:
+                    if internel_iter % 200 == 0 and self.epoch % 2 == 0:
                     #if internel_iter % 10 == 0:
                         img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
-                        self.visualize(images=x, labels=gt_labels, task= self.task,
+                        self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task= self.task,
                                        output=out, img_name=img_name, img_size=wh[0][0].item())
 
             #bar.close()
@@ -146,8 +155,8 @@ class Learner:
             self.lr_scheduler.step()
 
             # validate on val set
-            # val_loss, t = self.validate()
-            # t /= len(self.val_dataset)
+            val_loss, t = self.validate()
+            t /= len(self.val_dataset)
 
             # average loss for an epoch
             self.e_loss.append(np.mean(running_loss))  # epoch loss
@@ -333,8 +342,9 @@ class Learner:
         print("Training Finished!")
         return primary_loss
 
-    def visualize(self, images, labels, task, output, img_name, img_size):
+    def visualize(self, images, labels, boxes, task, output, img_name, img_size):
 
+        box_size = 4
         # 1- prepare image
         img = torch.zeros([3, img_size, img_size])
         img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
@@ -342,41 +352,71 @@ class Learner:
         img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
 
         # 2- find predictions definitions
-        out = self.sig(output[-1])
-        #print("out:")
-        #print(out)
-        definitions_pred = ["size"]
+        #out = self.sig(output[-1])
+        out = output[-1]
+        definitions_pred = []
+        boxes_pred = []
 
         l = task.boundary[1] - task.boundary[0]
         index = 0
-        while index < len(out):
-            go_on = out[index]
-            index += 1
-            if go_on <= 0.5:
-                index += l
-                continue
-            prediction = out[index:index + l]
-            pred_index = prediction.argmax()
-            index += l
+        rep_count = 0
+        skip_indexes = []
+        while rep_count < VisionTask._max_box_count:
+            # read flag                                                        
+            go_on = out[index]                                                 
+            index += 1                                                         
+            if go_on <= 0.5:                                                   
+                index += l                                                     
+                skip_indexes.append(rep_count)
+                rep_count += 1
+                continue                                                       
+            # read label prediction                                            
+            prediction = out[index:index + l]                                  
+            pred_index = prediction.argmax()                                   
+            index += l                                                         
             definitions_pred.append(self._labels_definition[task.get_name()][pred_index])
-        print("prediction size: ", len(definitions_pred)-1)
-        definitions_pred[0] = str(len(definitions_pred)-1)
+            rep_count += 1
+
+        
+        rep_count = 0
+        while index < len(out):
+            # read flag
+            if rep_count in skip_indexes:
+                index += box_size
+                rep_count += 1
+                continue
+            # read box prediction
+            boxes_pred.append(out[index:index+box_size]*224.0)
+            index += box_size
+            rep_count += 1
+
+        print("prediction size: ", len(definitions_pred))
+        print("prediction box size:", len(boxes_pred))
+        #print(boxes_pred)
 
         # 3- draw labels definitions
-        definitions_lbl = ["size"]
+        definitions_lbl = []
+        boxes_lbl = []
         box_count = len(labels[-1][-1])
         for j in range(min(box_count, VisionTask._max_box_count)):
             l = labels[-1][-1][j]  # len(l) = 149
+            b = boxes[-1][-1][j]*224.0   # len(b) = 4 always
+            #print("________________ b= ___________________")
+            #print(b)
             if l[0] == 0:
                 break
             l = l[task.boundary[0]:task.boundary[1]]
             label_index = l.argmax()
             definitions_lbl.append(self._labels_definition[task.get_name()][label_index])
-        print("label size: ", len(definitions_lbl)-1)
-        definitions_lbl[0] = str(len(definitions_lbl)-1)
+            boxes_lbl.append(b)
+
+        print("label size: ", len(definitions_lbl))
+        print("label box size:", len(boxes_lbl))
+        #print(boxes_lbl)
 
         # 4- draw both definitions
-        img_with_text = draw_text(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl)
+        img_with_text = draw_text_box(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl
+                                      , box_list_lbl=boxes_lbl, box_list_pred=boxes_pred)
         self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
 
 
@@ -417,34 +457,45 @@ class Learner:
     #     self.logger.log_image(img_tensor, name="v", image_channels='first')
 
 
-    # @timeit
-    # @torch.no_grad()
-    # def validate(self):
-    #
-    #     self.model.eval()
-    #
-    #     running_loss = []
-    #
-    #     for idx, (x, y) in tqdm(enumerate(self.val_data), desc="Validation"):
-    #         # move data to device
-    #         x = x.to(device=self.device)
-    #         y = y.to(device=self.device)
-    #
-    #         # forward, backward
-    #         if self.epoch > self.cfg.train_params.swa_start:
-    #             # Update bn statistics for the swa_model
-    #             torch.optim.swa_utils.update_bn(self.data, self.swa_model)
-    #             out = self.swa_model(x)
-    #         else:
-    #             out = self.model(x)
-    #
-    #         loss = self.criterion(out, y)
-    #         running_loss.append(loss.item())
-    #
-    #     # average loss
-    #     loss = np.mean(running_loss)
-    #
-    #     return loss
+    @timeit
+    @torch.no_grad()
+    def validate(self):
+    
+        self.model.eval()
+    
+        running_loss = []
+
+
+        for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data_val):
+            y_lbl = self.task.get_flat_label(labels=gt_labels)
+            y_box = self.task.get_flat_boxes(boxes=gt_boxes)
+   
+            # move data to device
+            x = x.to(device=self.device)
+            y_lbl = y_lbl.to(device=self.device)
+            y_box = y_box.to(device=self.device)
+   
+            # forward, backward
+            encoded_vector = self.model(x)
+            out = self.decoder(encoded_vector)
+
+            loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
+            loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+            loss = loss_lbl + loss_box
+            running_loss.append(loss.item())
+
+
+
+            img_name = "img_" + str(self.epoch)
+            self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task= self.task,
+                                            output=out, img_name=img_name, img_size=wh[0][0].item())
+
+
+    
+        # average loss
+        loss = np.mean(running_loss)
+    
+        return loss
 
     def init_logger(self, cfg):
         logger = None

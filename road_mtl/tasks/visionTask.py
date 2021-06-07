@@ -8,6 +8,7 @@ import torch
 class VisionTask:
 
     _max_box_count = 20
+    _output_box_max_size = 80
 
     def __init__(self, task_name, decode_dims, activation_function):
 
@@ -28,8 +29,9 @@ class VisionTask:
             self.boundary = [81, 149]
 
         # update decode dims last part to output_max_size instead of it's real value.
-        self._output_max_size = (self.boundary[1] - self.boundary[0] + 1) * self._max_box_count  
-        self.decode_dims[-1] = self._output_max_size 
+        # +4 for box size
+        self._output_max_size = (self.boundary[1] - self.boundary[0] + 1) * self._max_box_count
+        self.decode_dims[-1] = self._output_max_size + self._output_box_max_size
 
         # stores accuracy of task when it trained as single task.
         self._acc_threshold = 0
@@ -91,6 +93,7 @@ class VisionTask:
                 else:
                     flat_label = torch.cat((flat_label, zero_tensor))
 
+                # append label
                 flat_label = torch.cat((flat_label, l))
         
             for k in range (self._output_max_size - len(flat_label)):
@@ -99,6 +102,26 @@ class VisionTask:
             flat_labels[i] = flat_label
 
         return flat_labels
+
+
+    def get_flat_boxes(self, boxes):
+        zero_tensor = torch.tensor([0])
+        batch_size = len(boxes)                                               
+        #print("batch size: " + str(batch_size))
+        flat_boxes = torch.zeros(batch_size, self._output_box_max_size)           
+        for i in range(batch_size):                                            
+            flat_box = torch.empty(0)                                        
+            box_count = len(boxes[i][-1])                                     
+            for j in range(min(box_count, VisionTask._max_box_count)):         
+                b = boxes[i][-1][j] # len(l) = 4                            
+                # append box                                                 
+                flat_box = torch.cat((flat_box, b))                        
+                                                                                
+            for k in range (self._output_box_max_size - len(flat_box)):          
+                flat_box = torch.cat((flat_box, zero_tensor))              
+                                                                                   
+            flat_boxes[i] = flat_box                                                                                                                        
+        return flat_boxes
 
 
 

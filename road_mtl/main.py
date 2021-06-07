@@ -43,7 +43,7 @@ if __name__ == "__main__":
                         type=str, help='dataset being used')
     parser.add_argument('--TRAIN_SUBSETS', default='train_3,',
                         type=str, help='Training SUBSETS separated by ,')
-    parser.add_argument('--VAL_SUBSETS', default='',
+    parser.add_argument('--VAL_SUBSETS', default='val_3',
                         type=str, help='Validation SUBSETS separated by ,')
     parser.add_argument('--TEST_SUBSETS', default='',
                         type=str, help='Testing SUBSETS separated by ,')
@@ -74,28 +74,33 @@ if __name__ == "__main__":
 
     if args.MODE in ['train', 'val']:
         print_info("Loading dataset ...")
-        data_set = VideoDataset(args)
-        print_info("Dataset loaded.")
 
-        data_loader = DataLoader(dataset=data_set,
+        args.SUBSETS = args.TRAIN_SUBSETS
+        data_set_train = VideoDataset(args, train=True)
+        #print_info("Dataset loaded.")
+
+        data_loader_train = DataLoader(dataset=data_set_train,
                                  batch_size=args.BATCH_SIZE,
                                  num_workers=args.NUM_WORKERS,
                                  shuffle=True, pin_memory=True,
                                  collate_fn=custum_collate,
                                  drop_last=True)
 
-        tasks_manager = TasksManager(data_loader=data_loader, seq_len=args.SEQ_LEN,
+        args.SUBSETS = args.VAL_SUBSETS
+        data_set_val = VideoDataset(args)
+        data_loader_val = DataLoader(dataset=data_set_val,
+                                      batch_size=args.BATCH_SIZE,
+                                      num_workers=args.NUM_WORKERS,
+                                      shuffle=True, pin_memory=True,
+                                      collate_fn=custum_collate,
+                                      drop_last=True)
+
+
+
+        tasks_manager = TasksManager(data_loader_train=data_loader_train, data_loader_val=data_loader_val, seq_len=args.SEQ_LEN,
                                      labels_definition=data_set.get_labels_definition())
-
-        images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh = data_loader.dataset.__getitem__(10)
-
-        #print(args)
-        #if args.MULTI == False:
-        print("--------- Start running single task. --------- ")
         tasks_manager.run_tasks_single()
-        #else:
-        #print("--------- Start running multi task. --------- ")
-        #tasks_manager.run_multi_tasks()
+        tasks_manager.run_multi_tasks()
 
     else:
         args.MAX_SEQ_STEP = 1
