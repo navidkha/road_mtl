@@ -144,13 +144,6 @@ class Learner:
                     epoch=self.epoch
                 )
 
-                with torch.no_grad():
-                    if internel_iter % 200 == 0 and self.epoch % 2 == 0:
-                    #if internel_iter % 10 == 0:
-                        img_name = "img_" + str(self.epoch) + "_" + str(internel_iter)
-                        self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task= self.task,
-                                       output=out, img_name=img_name, img_size=wh[0][0].item())
-
             #bar.close()
             
            
@@ -203,54 +196,59 @@ class Learner:
         print("Training Finished!")
         return loss
 
-    def train_multi(self, primary_task, auxiliary_tasks):
+    def train_multi(self, auxiliary_tasks):
 
-        # 1- got to gpu fo all tasks
+        # 1- go to gpu fo all tasks
         for auxilary_task in auxiliary_tasks:
             auxilary_task.go_to_gpu(self.device)
-        primary_task.go_to_gpu(self.device)
-
-        activation_function = nn.Sigmoid()
+        self.task.go_to_gpu(self.device)
 
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
             self.model.train()
 
-            for internel_iter, (images, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(
-                    self.data):
-                self.optimizer.zero_grad()
+            for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data_val):
 
-                x = images
                 x = x.to(device=self.device)
                 encoded_vector = self.model(x)
 
                 total_loss = None
                 # for auxiliary tasks
                 for auxiliary_task in auxiliary_tasks:
-                    y = auxiliary_task.get_flat_label(gt_labels)
+                    y_lbl = auxiliary_task.get_flat_label(gt_labels)
+                    y_box = auxiliary_task.get_flat_boxes(gt_boxes)
                     # move data to device
-                    y = y.to(device=self.device)
+                    y_lbl = y_lbl.to(device=self.device)
+                    y_box = y_box.to(device=self.device)
                     # forward
                     out = auxiliary_task.decode(encoded_vector)
-                    auxiliary_loss = self.criterion(activation_function(out), y)
+                    auxiliary_loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
+                    auxiliary_loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+                    auxiliary_loss = auxiliary_loss_lbl + auxiliary_loss_box
                     if total_loss is None:
                         total_loss = auxiliary_loss
                     else:
                         total_loss += auxiliary_loss
 
                 # for primary task
-                y = primary_task.get_flat_label(gt_labels)
+                y_lbl = self.task.get_flat_label(gt_labels)
+                y_box = self.task.get_flat_boxes(gt_boxes)
                 # move data to device
-                y = y.to(device=self.device)
+                y_lbl = y_lbl.to(device=self.device)
+                y_box = y_box.to(device=self.device)
                 # forward
-                out = primary_task.decode(encoded_vector)
-                primary_loss = self.criterion(activation_function(out), y)
+                out = self.task.decode(encoded_vector)
+                primary_loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
+                primary_loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+                primary_loss = primary_loss_lbl + primary_loss_box
                 total_loss += primary_loss
 
 
+                self.optimizer.zero_grad()
                 total_loss.backward()
                 # check grad norm for debugging
                 grad_norm = check_grad_norm(self.model)
+                grad_norm_decoder = check_grad_norm(self.decoder)
                 # update
                 self.optimizer.step()
 
@@ -259,48 +257,19 @@ class Learner:
                 self.logger.log_metrics(
                     {
                         # "epoch": self.epoch,
-                        "batch": internel_iter,
+                        #"batch": internel_iter,
                         "primary_loss": primary_loss.item(),
-                        "GradNorm": grad_norm,
+                        "GradNormEncoder": grad_norm,
+                        "GradNormDecoder": grad_norm_decoder,
                     },
                     epoch=self.epoch
                 )
 
-                # validation
-                if internel_iter % 1000 == 0 and self.epoch % 5 == 0:
-                    print("Internel iter: ", internel_iter)
-                    out = activation_function(out[-1])
-                    definitions = []
-                    l = primary_task.boundary[1] - primary_task.boundary[0]
-                    n_boxes = len(gt_boxes[-1][-1])
-                    print("Number of Boxes:", n_boxes)
-                    name = "img_" + str(self.epoch) + "_" + str(internel_iter / 1000)
-                    for i in range(n_boxes):
-                        prediction = out[i * l + 1 + i: i * l + l + 1 + i]
-                        prediction = prediction.argmax()
-                        definitions.append(name + ": " + self._labels_definition[primary_task.get_name()][prediction])
 
-                    print("list", definitions)
-                    sz = wh[0][0].item()
-                    img = torch.zeros([3, sz, sz])
-                    img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
-                    img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
-                    img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
-
-                    img_with_text = draw_text(img, definitions)
-                    self.logger.log_image(img_with_text, name=name, image_channels='first')
-
-            # Visualize
-            # self.predict_visualize(index_list=visualize_idx, task=task)
-
-            if self.epoch > self.cfg.train_params.swa_start:
-                self.swa_model.update_parameters(self.model)
-                self.swa_scheduler.step()
-            else:
-                self.lr_scheduler.step()
+            self.lr_scheduler.step()
 
             # validate on val set
-            # val_loss, t = self.validate()
+            val_loss = self.validate_multi(auxiliary_tasks)
             # t /= len(self.val_dataset)
 
             # average loss for an epoch
@@ -321,16 +290,16 @@ class Learner:
             # and if it has, it will make a checkpoint of the current model
             # self.early_stopping(val_loss, self.model)
 
-            if self.early_stopping.early_stop:
-                print("Early stopping")
-                self.save()
-                break
+            # if self.early_stopping.early_stop:
+            #     print("Early stopping")
+            #     self.save()
+            #     break
 
             if self.epoch % self.cfg.train_params.save_every == 0:
                 self.save()
 
             gc.collect()
-            print("Task: " + primary_task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
+            #print("Task: " + self.task.get_name() + ", Auxiliary: " + auxiliary_tasks[0].get_name() + " epoch[" + str(self.epoch) + "] finished.")
             self.epoch += 1
 
         # Update bn statistics for the swa_model at the end
@@ -494,6 +463,59 @@ class Learner:
         loss = np.mean(running_loss)
     
         return loss
+
+    @timeit
+    @torch.no_grad()
+    def validate_multi(self, auxiliary_tasks):
+
+        self.model.eval()
+
+        running_loss = []
+
+        for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data_val):
+
+            x = x.to(device=self.device)
+            encoded_vector = self.model(x)
+
+            total_loss = None
+            # for auxiliary tasks
+            for auxiliary_task in auxiliary_tasks:
+                y_lbl = auxiliary_task.get_flat_label(gt_labels)
+                y_box = auxiliary_task.get_flat_boxes(gt_boxes)
+                # move data to device
+                y_lbl = y_lbl.to(device=self.device)
+                y_box = y_box.to(device=self.device)
+                # forward
+                out = auxiliary_task.decode(encoded_vector)
+                auxiliary_loss_lbl = self.criterion_lbl(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
+                auxiliary_loss_box = self.criterion_box(out[:, -VisionTask._output_box_max_size:], y_box)
+                auxiliary_loss = auxiliary_loss_lbl + auxiliary_loss_box
+                if total_loss is None:
+                    total_loss = auxiliary_loss
+                else:
+                    total_loss += auxiliary_loss
+
+            # for primary task
+            y_lbl = self.task.get_flat_label(gt_labels)
+            y_box = self.task.get_flat_boxes(gt_boxes)
+            # move data to device
+            y_lbl = y_lbl.to(device=self.device)
+            y_box = y_box.to(device=self.device)
+            # forward
+            out = self.task.decode(encoded_vector)
+            primary_loss_lbl = self.criterion_lbl(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
+            primary_loss_box = self.criterion_box(out[:, -VisionTask._output_box_max_size:], y_box)
+            primary_loss = primary_loss_lbl + primary_loss_box
+            total_loss += primary_loss
+
+            running_loss.append(primary_loss.item())
+
+            img_name = "img_" + str(self.epoch)
+            self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task=self.task,
+                           output=out, img_name=img_name, img_size=wh[0][0].item())
+
+        return primary_loss
+
 
     def init_logger(self, cfg):
         logger = None

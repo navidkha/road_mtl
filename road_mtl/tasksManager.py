@@ -45,7 +45,8 @@ class TasksManager:
         for task in self._tasks_list:
             print("Task: " + task.get_name() + " started.")
             encoder = ResNet(self._seq_len, pre_trained = True)
-            learner = Learner(cfg_path, self._data_loader_train, self._data_loader_val, encoder, task, labels_definition=self._labels_definition)
+            learner = Learner(cfg_path, data_loader_train=self._data_loader_train,
+                              data_loader_val=self._data_loader_val, encoder=encoder, decoder=task, labels_definition=self._labels_definition)
             acc = learner.train()
             print("Task: " + task.get_name() + " finished. Loss is: " + str(acc))
             task.set_acc_threshold(acc)
@@ -62,10 +63,12 @@ class TasksManager:
                 if auxiliary_task.get_name() != primary_task.get_name():
                     print("Primary task: " + primary_task.get_name() +
                           ", Auxiliary task: " + auxiliary_task.get_name() + " started.")
-                    learner = Learner(cfg_path, self._data_loader, encoder, labels_definition=self._labels_definition)
+                    learner = Learner(cfg_path, data_loader_train=self._data_loader_train,
+                                      data_loader_val=self._data_loader_val, encoder=encoder, decoder=primary_task,
+                                      labels_definition=self._labels_definition)
                     auxiliary_task_list.clear()
                     auxiliary_task_list.append(auxiliary_task)
-                    acc = learner.train_multi(primary_task, auxiliary_task_list)
+                    acc = learner.train_multi(auxiliary_task_list)
 
                     print("Primary Task: " + primary_task.get_name() + ", Auxiliary task:" + auxiliary_task.get_name()
                           + " finished. Primary loss is: " + str(acc))
