@@ -9,6 +9,8 @@ import torch.nn as nn
 from tasks.visionTask import VisionTask
 from utils.imageUtils import *
 
+from utils.utility import timeit
+
 try:
     sys.path.append(str(Path(".").resolve()))
 except:
@@ -155,8 +157,8 @@ class Learner:
             self.lr_scheduler.step()
 
             # validate on val set
-            val_loss, t = self.validate()
-            t /= len(self.val_dataset)
+            val_loss = self.validate()
+            #t /= len(self.val_dataset)
 
             # average loss for an epoch
             self.e_loss.append(np.mean(running_loss))  # epoch loss
@@ -178,10 +180,10 @@ class Learner:
             # and if it has, it will make a checkpoint of the current model
             #self.early_stopping(val_loss, self.model)
 
-            if self.early_stopping.early_stop:
-                print("Early stopping")
-                self.save()
-                break
+            #if self.early_stopping.early_stop:
+            #    print("Early stopping")
+            #    self.save()
+            #    break
 
             if self.epoch % self.cfg.train_params.save_every == 0:
                 self.save()
@@ -484,13 +486,9 @@ class Learner:
             loss = loss_lbl + loss_box
             running_loss.append(loss.item())
 
-
-
             img_name = "img_" + str(self.epoch)
             self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task= self.task,
                                             output=out, img_name=img_name, img_size=wh[0][0].item())
-
-
     
         # average loss
         loss = np.mean(running_loss)

@@ -79,6 +79,7 @@ if __name__ == "__main__":
         data_set_train = VideoDataset(args, train=True)
         #print_info("Dataset loaded.")
 
+        print("train dataset size: " + str(len(data_set_train)))
         data_loader_train = DataLoader(dataset=data_set_train,
                                  batch_size=args.BATCH_SIZE,
                                  num_workers=args.NUM_WORKERS,
@@ -88,6 +89,7 @@ if __name__ == "__main__":
 
         args.SUBSETS = args.VAL_SUBSETS
         data_set_val = VideoDataset(args)
+        print("validation dataset size: " + str(len(data_set_val)))
         data_loader_val = DataLoader(dataset=data_set_val,
                                       batch_size=args.BATCH_SIZE,
                                       num_workers=args.NUM_WORKERS,
@@ -98,7 +100,7 @@ if __name__ == "__main__":
 
 
         tasks_manager = TasksManager(data_loader_train=data_loader_train, data_loader_val=data_loader_val, seq_len=args.SEQ_LEN,
-                                     labels_definition=data_set.get_labels_definition())
+                                     labels_definition=data_set_train.get_labels_definition())
         tasks_manager.run_tasks_single()
         tasks_manager.run_multi_tasks()
 
