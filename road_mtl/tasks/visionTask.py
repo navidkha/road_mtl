@@ -45,6 +45,9 @@ class VisionTask:
     def __str__(self):
         return self.task_name
 
+    def get_num_classes(self):
+        return len(self.boundary)
+
     def get_name(self):
         return self.task_name
 

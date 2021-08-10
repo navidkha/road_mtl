@@ -10,10 +10,6 @@ from tasks.visionTask import VisionTask
 from utils.imageUtils import *
 
 from utils.utility import timeit
-from torchvision import models
-import copy
-import os
-import time
 
 try:
     sys.path.append(str(Path(".").resolve()))
@@ -33,20 +29,31 @@ from utils.utility import get_conf
 
 
 class Learner:
-    def __init__(self, cfg_dir: str, data_loader_train:DataLoader, data_loader_val: DataLoader, task:VisionTask, labels_definition):
+    def __init__(self, cfg_dir: str, data_loader_train:DataLoader, data_loader_val: DataLoader, encoder, decoder, labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
         self.logger = self.init_logger(self.cfg.logger)
-        self.task = task
-        self.data_loaders = {'train': data_loader_train, 'val': data_loader_val}
-        self.model = self._generate_model()
+        self.task = decoder
+        self.data_train = data_loader_train
+        self.data_val = data_loader_val
+        self.model = encoder
+        self.decoder = decoder.mlp
+        self.sig = nn.Sigmoid()
+        #self.model._resnet.conv1.apply(init_weights_normal)
         self.device = self.cfg.train_params.device
         self.model = self.model.to(device=self.device)
-        self.optimizer = optim.Adam(self.model.fc.parameters(), **self.cfg.adam)
+        self.decoder = self.decoder.to(device=self.device)
+        if self.cfg.train_params.optimizer.lower() == "adam":
+            params = list(self.model.parameters()) + list(self.decoder.parameters())
+            self.optimizer = optim.Adam(params, **self.cfg.adam)
+        elif self.cfg.train_params.optimizer.lower() == "rmsprop":
+            self.optimizer = optim.RMSprop([self.model.parameters(), self.decoder.parameters()], **self.cfg.rmsprop)
+        else:
+            raise ValueError(f"Unknown optimizer {self.cfg.train_params.optimizer}")
+
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion_lbl = nn.CrossEntropyLoss()
+        self.criterion_lbl = nn.BCELoss()
         self.criterion_box = nn.MSELoss()
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
 
         if self.cfg.logger.resume:
             # load checkpoint
@@ -55,7 +62,7 @@ class Learner:
             checkpoint = load_checkpoint(save_dir, self.device)
             self.model.load_state_dict(checkpoint["model"])
             self.optimizer.load_state_dict(checkpoint["optimizer"])
-            self.scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
             self.epoch = checkpoint["epoch"]
             self.e_loss = checkpoint["e_loss"]
             self.best = checkpoint["best"]
@@ -69,99 +76,125 @@ class Learner:
             self.best = np.inf
             self.e_loss = []
 
-    def _generate_model(self):
-        model = models.resnet50(pretrained=True)
-        # freeze resnet50 layers
-        for param in model.parameters():
-            param.requires_grad = False
+        # initialize the early_stopping object
+        self.early_stopping = EarlyStopping(
+            patience=self.cfg.train_params.patience,
+            verbose=True,
+            delta=self.cfg.train_params.early_stopping_delta,
+        )
 
-        resnet_out_num = model.fc.in_features
-        model.fc = nn.Sequential(
-                   nn.Linear(resnet_out_num, 500),
-                   nn.ReLU(),
-                   nn.Linear(500, self.task.get_num_classes())
-            )
-        return model
+        # stochastic weight averaging
+        self.swa_model = AveragedModel(self.model)
+
 
     def train(self):
-        since = time.time()
-        best_acc = 0.0
-        best_model_wts = copy.deepcopy(self.model.state_dict())
+
+
         while self.epoch <= self.cfg.train_params.epochs:
             running_loss = []
+            self.model.train()
             self.logger.set_epoch(self.epoch)
-            best_acc = 0.0
 
-            # Each epoch has a training and validation phase
-            for phase in ['train', 'val']:
-                if phase == 'train':
-                    self.model.train()  # Set model to training mode
-                else:
-                    self.model.eval()  # Set model to evaluate mode
+            for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data_train):
 
-                running_loss = 0.0
-                running_corrects = 0
+                # m = nn.Sigmoid()
+                y_lbl = self.task.get_flat_label(labels=gt_labels)
+                y_box = self.task.get_flat_boxes(boxes=gt_boxes)
 
-                # Iterate over data.
-                for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) \
-                        in enumerate(self.data_loaders[phase]):
-                    inputs = x.to(self.device)
-                    labels = self.task.get_flat_label(gt_labels).to(self.device)
 
-                    # forward
-                    # track history if only in train
-                    with torch.set_grad_enabled(phase == 'train'):
-                        outputs = self.model(inputs)
-                        _, preds = torch.max(outputs, 1)
-                        loss = self.criterion_lbl(outputs, labels)
+                # move data to device
+                x = x.to(device=self.device)
+                y_lbl = y_lbl.to(device=self.device)
+                y_box = y_box.to(device=self.device)
 
-                        # backward + optimize only if in training phase
-                        if phase == 'train':
-                            self.optimizer.zero_grad()
-                            loss.backward()
-                            self.optimizer.step()
+                # forward, backward
+                encoded_vector = self.model(x)
+                out = self.decoder(encoded_vector)
 
-                        # visualize
-                        if phase == 'val':
-                            img_name = "img_" + str(self.epoch)
-                            self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task=self.task,
-                                           output=outputs, img_name=img_name, img_size=wh[0][0].item())
+                #print(out.shape)
+                #print(y_lbl.shape)
+                #print(y_box.shape)
+                #print(out[:,-VisionTask._output_box_max_size:].shape)
 
-                    self.logger.log_metrics(
-                        {
-                            # "epoch": self.epoch,
-                            # "batch": internel_iter,
-                            "primary_loss": loss.item()
-                        },
-                        epoch=self.epoch
-                    )
+                loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
+                loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+                loss = loss_lbl + loss_box
+                self.optimizer.zero_grad()
+                loss.backward()
 
-                    # statistics
-                    running_loss += loss.item() * inputs.size(0)
-                    running_corrects += torch.sum(preds == labels.data)
+                # check grad norm for debugging
+                grad_norm = check_grad_norm(self.model)
+                grad_norm_decoder = check_grad_norm(self.decoder)
+                # update
+                self.optimizer.step()
 
-                if phase == 'train':
-                    self.scheduler.step()
+                running_loss.append(loss.item())
 
-                epoch_loss = running_loss / len(self.data_loaders[phase])
-                epoch_acc = running_corrects.double() / len(self.data_loaders[phase])
+                #print("Loss:", loss.item())
+                #print("grad_norm_encoder", grad_norm)
+                #print("grad_norm_decoder", grad_norm_decoder)
 
-                print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                    phase, epoch_loss, epoch_acc))
+                self.logger.log_metrics(
+                    {
+                    #"epoch": self.epoch,
+                    "loss": loss.item(),
+                    "GradNormEncoder": grad_norm,
+                    "GradNormDecoder": grad_norm_decoder,
+                    },
+                    epoch=self.epoch
+                )
 
-                # deep copy the model
-                if phase == 'val' and epoch_acc > best_acc:
-                    best_acc = epoch_acc
-                    best_model_wts = copy.deepcopy(self.model.state_dict())
-            print()
+            #bar.close()
+            
+           
+            self.lr_scheduler.step()
 
-        time_elapsed = time.time() - since
-        print('Training complete in {:.0f}m {:.0f}s'.format(
-            time_elapsed // 60, time_elapsed % 60))
-        print('Best val Acc: {:4f}'.format(best_acc))
+            # validate on val set
+            val_loss = self.validate()
+            #t /= len(self.val_dataset)
 
-        # load best model weights
-        self.model.load_state_dict(best_model_wts)
+            # average loss for an epoch
+            self.e_loss.append(np.mean(running_loss))  # epoch loss
+            # print(
+            #     f"{datetime.now():%Y-%m-%d %H:%M:%S} Epoch {self.epoch} summary: train Loss: {self.e_loss[-1]:.2f} \t| Val loss: {val_loss:.2f}"
+            #     f"\t| time: {t:.3f} seconds"
+            # )
+
+            self.logger.log_metrics(
+                {
+                    "epoch": self.epoch,
+                    "epoch_loss": self.e_loss[-1],
+                },
+                epoch = self.epoch
+               
+            )
+
+            # early_stopping needs the validation loss to check if it has decreased,
+            # and if it has, it will make a checkpoint of the current model
+            #self.early_stopping(val_loss, self.model)
+
+            #if self.early_stopping.early_stop:
+            #    print("Early stopping")
+            #    self.save()
+            #    break
+
+            if self.epoch % self.cfg.train_params.save_every == 0:
+                self.save()
+
+            gc.collect()
+            print("Task: " + self.task.get_name() + " epoch[" + str(self.epoch) + "] finished.")
+            self.epoch += 1
+
+        # Update bn statistics for the swa_model at the end
+        #if self.epoch >= self.cfg.train_params.swa_start:
+#            torch.optim.swa_utils.update_bn(self.data.to(self.device), self.swa_model)
+            #self.save(name=self.cfg.directory.model_name + "-final" + str(self.epoch) + "-swa")
+
+        #macs, params = op_counter(self.model, sample=x)
+        #print(macs, params)
+        #self.logger.log_metrics({"GFLOPS": macs[:-1], "#Params": params[:-1], "task name": task.get_name(), "total_loss": self.e_loss[-1]})
+        print("Training Finished!")
+        return loss
 
     def train_multi(self, auxiliary_tasks):
 
@@ -356,6 +389,44 @@ class Learner:
         img_with_text = draw_text_box(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl
                                       , box_list_lbl=boxes_lbl, box_list_pred=boxes_pred)
         self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
+
+
+    # def log_image_with_text(self, img_tensor, out_vector, index, task):
+    #     definitions = []
+    #     label_len = task.boundary[1]-task.boundary[0]
+    #     name = "img_" + str(index)
+    #     i = 0
+    #     while True:
+    #         finished = out_vector[i]
+    #         if finished == True:
+    #             break
+    #         i += 1
+    #
+    #         l = out_vector[i, label_len]
+    #         i += label_len
+    #         if len(np.nonzero(l)) > 0:
+    #             definition_idx = np.nonzero(l)[0][0]
+    #             definitions.append(name + ": " + self._labels_definition[task.get_name()][definition_idx])
+    #
+    #     print(definitions)
+    #     self.logger.log_image(img_tensor, name=name, image_channels='first')
+    #
+    #
+    # def log_image_with_text_on_it(self, img_tensor, labels, task):
+    #     definitions = []
+    #     box_count = len(labels)
+    #     for j in range(min(box_count, VisionTask._max_box_count)):
+    #         l = labels[j]  # len(l) = 149
+    #         l = l[task.boundary[0]:task.boundary[1]]
+    #         if len(np.nonzero(l)) > 0:
+    #             definition_idx = np.nonzero(l)[0][0]
+    #             definitions.append(self._labels_definition[task.get_name()][definition_idx])
+    #
+    #     img = draw_text(img_tensor, definitions)
+    #     print(definitions)
+    #     # print(images.shape)
+    #     self.logger.log_image(img_tensor, name="v", image_channels='first')
+
 
     @timeit
     @torch.no_grad()
