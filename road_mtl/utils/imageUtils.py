@@ -57,6 +57,48 @@ def draw_text_box(img_tensor, text_list_pred, text_list_lbl, box_list_pred, box_
     return img
 
 
+def draw_text_box2(img_tensor, text_list_pred, text_list_lbl):
+
+    img = img_tensor.permute(1, 2, 0).numpy()
+    img_width = img.shape[1]
+    img = Image.fromarray(
+        (((img - img.min()) / (-img.min() + img.max())) * 255).astype(np.uint8)
+    )
+    draw = ImageDraw.Draw(img)
+    # load font
+    font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-L.ttf", size=11)
+    color_pred = (255, 0, 0)
+
+    cords_pred = []
+
+    x = 50
+    y = 50
+    for i in range(len(text_list_pred)):
+        draw.text(
+            (x, y),  # Coordinates
+            text_list_pred[i],  # Text
+            color_pred,  # Color
+            font=font
+        )
+        draw.rectangle(cords_pred[i], outline=color_pred)
+        y += 100
+
+    x = img_width - 200
+    y = 50
+    cords_lbl = []
+    color_lbl = (0, 255, 0)
+    for i in range(len(text_list_lbl)):
+        draw.text(
+            (x, y),  # Coordinates
+            text_list_lbl[i],  # Text
+            color_lbl,  # Color
+            font=font
+        )
+        draw.rectangle(cords_lbl[i], outline=color_lbl)
+        y += 100
+    return img
+
+
 # def draw_on_image(img, measurements: dict, action):
 #     """Draw text on the image
 #

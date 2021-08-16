@@ -46,7 +46,7 @@ class VisionTask:
         return self.task_name
 
     def get_num_classes(self):
-        return len(self.boundary)
+        return self.boundary[1]-self.boundary[0]
 
     def get_name(self):
         return self.task_name
@@ -98,7 +98,7 @@ class VisionTask:
 
                 # append label
                 flat_label = torch.cat((flat_label, l))
-        
+
             for k in range (self._output_max_size - len(flat_label)):
                 flat_label = torch.cat((flat_label, zero_tensor))
 
@@ -109,25 +109,19 @@ class VisionTask:
 
     def get_flat_boxes(self, boxes):
         zero_tensor = torch.tensor([0])
-        batch_size = len(boxes)                                               
+        batch_size = len(boxes)
         #print("batch size: " + str(batch_size))
-        flat_boxes = torch.zeros(batch_size, self._output_box_max_size)           
-        for i in range(batch_size):                                            
-            flat_box = torch.empty(0)                                        
-            box_count = len(boxes[i][-1])                                     
-            for j in range(min(box_count, VisionTask._max_box_count)):         
-                b = boxes[i][-1][j] # len(l) = 4                            
-                # append box                                                 
-                flat_box = torch.cat((flat_box, b))                        
-                                                                                
-            for k in range (self._output_box_max_size - len(flat_box)):          
-                flat_box = torch.cat((flat_box, zero_tensor))              
-                                                                                   
-            flat_boxes[i] = flat_box                                                                                                                        
+        flat_boxes = torch.zeros(batch_size, self._output_box_max_size)
+        for i in range(batch_size):
+            flat_box = torch.empty(0)
+            box_count = len(boxes[i][-1])
+            for j in range(min(box_count, VisionTask._max_box_count)):
+                b = boxes[i][-1][j] # len(l) = 4
+                # append box
+                flat_box = torch.cat((flat_box, b))
+
+            for k in range (self._output_box_max_size - len(flat_box)):
+                flat_box = torch.cat((flat_box, zero_tensor))
+
+            flat_boxes[i] = flat_box
         return flat_boxes
-
-
-
-
-
-

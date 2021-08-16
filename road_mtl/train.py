@@ -14,6 +14,7 @@ from torchvision import models
 import copy
 import os
 import time
+from model.multi_output_classification import MultiOutputClassification
 
 try:
     sys.path.append(str(Path(".").resolve()))
@@ -26,27 +27,32 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.swa_utils import AveragedModel
 
-#from model.data_loader import CustomDataset, CustomDatasetVal
+# from model.data_loader import CustomDataset, CustomDatasetVal
 from utils.nn import check_grad_norm, EarlyStopping
 from utils.io import save_checkpoint, load_checkpoint
 from utils.utility import get_conf
+from model.basics import EfficientConvBlock
 
 
 class Learner:
-    def __init__(self, cfg_dir: str, data_loader_train:DataLoader, data_loader_val: DataLoader, task:VisionTask, labels_definition):
+    def __init__(self, cfg_dir: str, data_loader_train: DataLoader, data_loader_val: DataLoader, task: VisionTask,
+                 labels_definition):
         self.cfg = get_conf(cfg_dir)
         self._labels_definition = labels_definition
         self.logger = self.init_logger(self.cfg.logger)
         self.task = task
         self.data_loaders = {'train': data_loader_train, 'val': data_loader_val}
-        self.model = self._generate_model()
         self.device = self.cfg.train_params.device
+        self.model = MultiOutputClassification(task)
         self.model = self.model.to(device=self.device)
-        self.optimizer = optim.Adam(self.model.fc.parameters(), **self.cfg.adam)
-        self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
-        self.criterion_lbl = nn.CrossEntropyLoss()
-        self.criterion_box = nn.MSELoss()
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
+        # self.optimizer = optim.Adam(self.model.fc.parameters(), **self.cfg.adam)
+        self.optimizer = optim.Adam(self.model.fc.parameters(), lr=0.001)
+        self.criterion_class = nn.CrossEntropyLoss()
+        self.criterion_box = nn.SmoothL1Loss()
+        # self.criterion_lbl = nn.BCELoss()
+        # self.criterion_box = nn.MSELoss()
+        # self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100)
+        self.sig = nn.Sigmoid()
 
         if self.cfg.logger.resume:
             # load checkpoint
@@ -55,7 +61,7 @@ class Learner:
             checkpoint = load_checkpoint(save_dir, self.device)
             self.model.load_state_dict(checkpoint["model"])
             self.optimizer.load_state_dict(checkpoint["optimizer"])
-            self.scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            # self.scheduler.load_state_dict(checkpoint["lr_scheduler"])
             self.epoch = checkpoint["epoch"]
             self.e_loss = checkpoint["e_loss"]
             self.best = checkpoint["best"]
@@ -68,20 +74,6 @@ class Learner:
             self.epoch = 1
             self.best = np.inf
             self.e_loss = []
-
-    def _generate_model(self):
-        model = models.resnet50(pretrained=True)
-        # freeze resnet50 layers
-        for param in model.parameters():
-            param.requires_grad = False
-
-        resnet_out_num = model.fc.in_features
-        model.fc = nn.Sequential(
-                   nn.Linear(resnet_out_num, 500),
-                   nn.ReLU(),
-                   nn.Linear(500, self.task.get_num_classes())
-            )
-        return model
 
     def train(self):
         since = time.time()
@@ -105,55 +97,72 @@ class Learner:
                 # Iterate over data.
                 for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) \
                         in enumerate(self.data_loaders[phase]):
-                    inputs = x.to(self.device)
-                    labels = self.task.get_flat_label(gt_labels).to(self.device)
 
+                    input = x.to(self.device)
                     # forward
                     # track history if only in train
                     with torch.set_grad_enabled(phase == 'train'):
-                        outputs = self.model(inputs)
-                        _, preds = torch.max(outputs, 1)
-                        loss = self.criterion_lbl(outputs, labels)
+                        out_list_class, out_list_box = self.model(input)
+                        loss = None
+                        for i in range(len(out_list_class)):
+                            loss += self.criterion_class(out_list_class[0], out_list_class[1])
+                            loss += self.criterion_box(out_list_box[0], out_list_box[1])
+
+                        # preds = self.refine_out(outputs)
 
                         # backward + optimize only if in training phase
                         if phase == 'train':
+                            # print("----------------------------------------------")
+                            # print(outputs)
+                            # print(labels)
+
                             self.optimizer.zero_grad()
                             loss.backward()
                             self.optimizer.step()
 
                         # visualize
-                        if phase == 'val':
-                            img_name = "img_" + str(self.epoch)
-                            self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task=self.task,
-                                           output=outputs, img_name=img_name, img_size=wh[0][0].item())
+                        if phase == 'val' and internel_iter % 20 == 0:
+                            img_name = "img_" + str(self.epoch).zfill(2) + "_" + str(internel_iter).zfill(3)
+                            self.visualize(images=x,
+                                           out_list_class=out_list_class,
+                                           out_list_box=out_list_box,
+                                           task=self.task,
+                                           img_name=img_name,
+                                           img_size=wh[0][0].item())
 
                     self.logger.log_metrics(
                         {
                             # "epoch": self.epoch,
                             # "batch": internel_iter,
-                            "primary_loss": loss.item()
+                            "loss": loss.item() * input.size(0)
                         },
                         epoch=self.epoch
                     )
 
                     # statistics
-                    running_loss += loss.item() * inputs.size(0)
-                    running_corrects += torch.sum(preds == labels.data)
+                    running_loss += loss.item() * input.size(0)
+                    # print("----------------------------------")
+                    # print(labels.shape)
+                    # print(preds.shape)
+                    # print(labels.data)
+                    # running_corrects += torch.equal(preds, labels.data)
 
-                if phase == 'train':
-                    self.scheduler.step()
+                # if phase == 'train':
+                #    self.scheduler.step()
 
                 epoch_loss = running_loss / len(self.data_loaders[phase])
-                epoch_acc = running_corrects.double() / len(self.data_loaders[phase])
+                # epoch_acc = running_corrects.double() / len(self.data_loaders[phase])
+                # epoch_acc = float(running_corrects) / len(self.data_loaders[phase])
 
-                print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                    phase, epoch_loss, epoch_acc))
-
-                # deep copy the model
-                if phase == 'val' and epoch_acc > best_acc:
-                    best_acc = epoch_acc
-                    best_model_wts = copy.deepcopy(self.model.state_dict())
+                # print('{} Loss: {:.4f} Acc: {:.4f}'.format(
+                #     phase, epoch_loss, epoch_acc))
+                #
+                # # deep copy the model
+                # if phase == 'val' and epoch_acc > best_acc:
+                #     best_acc = epoch_acc
+                #     best_model_wts = copy.deepcopy(self.model.state_dict())
             print()
+            self.epoch += 1
 
         time_elapsed = time.time() - since
         print('Training complete in {:.0f}m {:.0f}s'.format(
@@ -162,6 +171,29 @@ class Learner:
 
         # load best model weights
         self.model.load_state_dict(best_model_wts)
+
+    def refine_out(self, out_orig):
+        # print("---------------------------------")
+        # print(out_orig.size(0))
+        out = torch.clone(out_orig)
+        for i in range(out.size(0)):
+            idx = 0
+            class_len = self.task.get_num_classes()
+            while idx < out.shape[1]:
+                if out[i][idx] > 0.5:
+                    out[i][idx] = 1
+                else:
+                    out[i][idx] = 0
+                idx += 1
+
+                temp = out[i][idx:idx + class_len]
+                mx = torch.max(temp)
+                max_idx = torch.argmax(temp)
+                temp[temp > 0] = 0
+                temp[max_idx] = 1
+
+                idx += class_len
+        return out
 
     def train_multi(self, auxiliary_tasks):
 
@@ -189,8 +221,9 @@ class Learner:
                     y_box = y_box.to(device=self.device)
                     # forward
                     out = auxiliary_task.decode(encoded_vector)
-                    auxiliary_loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
-                    auxiliary_loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+                    auxiliary_loss_lbl = self.criterion_class(self.sig(out[:, :-VisionTask._output_box_max_size]),
+                                                              y_lbl)
+                    auxiliary_loss_box = self.criterion_box(out[:, -VisionTask._output_box_max_size:], y_box)
                     auxiliary_loss = auxiliary_loss_lbl + auxiliary_loss_box
                     if total_loss is None:
                         total_loss = auxiliary_loss
@@ -205,11 +238,10 @@ class Learner:
                 y_box = y_box.to(device=self.device)
                 # forward
                 out = self.task.decode(encoded_vector)
-                primary_loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
-                primary_loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+                primary_loss_lbl = self.criterion_class(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
+                primary_loss_box = self.criterion_box(out[:, -VisionTask._output_box_max_size:], y_box)
                 primary_loss = primary_loss_lbl + primary_loss_box
                 total_loss += primary_loss
-
 
                 self.optimizer.zero_grad()
                 total_loss.backward()
@@ -224,14 +256,13 @@ class Learner:
                 self.logger.log_metrics(
                     {
                         # "epoch": self.epoch,
-                        #"batch": internel_iter,
+                        # "batch": internel_iter,
                         "primary_loss": primary_loss.item(),
                         "GradNormEncoder": grad_norm,
                         "GradNormDecoder": grad_norm_decoder,
                     },
                     epoch=self.epoch
                 )
-
 
             self.lr_scheduler.step()
 
@@ -266,7 +297,7 @@ class Learner:
                 self.save()
 
             gc.collect()
-            #print("Task: " + self.task.get_name() + ", Auxiliary: " + auxiliary_tasks[0].get_name() + " epoch[" + str(self.epoch) + "] finished.")
+            # print("Task: " + self.task.get_name() + ", Auxiliary: " + auxiliary_tasks[0].get_name() + " epoch[" + str(self.epoch) + "] finished.")
             self.epoch += 1
 
         # Update bn statistics for the swa_model at the end
@@ -280,7 +311,7 @@ class Learner:
         print("Training Finished!")
         return primary_loss
 
-    def visualize(self, images, labels, boxes, task, output, img_name, img_size):
+    def visualize_lbl(self, images, labels, task, output, img_name, img_size):
 
         box_size = 4
         # 1- prepare image
@@ -290,107 +321,110 @@ class Learner:
         img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
 
         # 2- find predictions definitions
-        #out = self.sig(output[-1])
         out = output[-1]
         definitions_pred = []
-        boxes_pred = []
 
         l = task.boundary[1] - task.boundary[0]
         index = 0
         rep_count = 0
         skip_indexes = []
         while rep_count < VisionTask._max_box_count:
-            # read flag                                                        
-            go_on = out[index]                                                 
-            index += 1                                                         
-            if go_on <= 0.5:                                                   
-                index += l                                                     
+            # read flag
+            go_on = out[index]
+            index += 1
+            if go_on == 0:
+                index += l
                 skip_indexes.append(rep_count)
                 rep_count += 1
-                continue                                                       
-            # read label prediction                                            
-            prediction = out[index:index + l]                                  
-            pred_index = prediction.argmax()                                   
-            index += l                                                         
+                continue
+                # read label prediction
+            prediction = out[index:index + l]
+            pred_index = prediction.argmax()
+            index += l
             definitions_pred.append(self._labels_definition[task.get_name()][pred_index])
             rep_count += 1
 
-        
-        rep_count = 0
-        while index < len(out):
-            # read flag
-            if rep_count in skip_indexes:
-                index += box_size
-                rep_count += 1
-                continue
-            # read box prediction
-            boxes_pred.append(out[index:index+box_size]*224.0)
-            index += box_size
-            rep_count += 1
-
-        print("prediction size: ", len(definitions_pred))
-        print("prediction box size:", len(boxes_pred))
-        #print(boxes_pred)
+        # print("prediction size: ", len(definitions_pred))
 
         # 3- draw labels definitions
         definitions_lbl = []
-        boxes_lbl = []
         box_count = len(labels[-1][-1])
         for j in range(min(box_count, VisionTask._max_box_count)):
             l = labels[-1][-1][j]  # len(l) = 149
-            b = boxes[-1][-1][j]*224.0   # len(b) = 4 always
-            #print("________________ b= ___________________")
-            #print(b)
             if l[0] == 0:
                 break
             l = l[task.boundary[0]:task.boundary[1]]
             label_index = l.argmax()
             definitions_lbl.append(self._labels_definition[task.get_name()][label_index])
-            boxes_lbl.append(b)
 
-        print("label size: ", len(definitions_lbl))
-        print("label box size:", len(boxes_lbl))
-        #print(boxes_lbl)
+        # print("label size: ", len(definitions_lbl))
 
         # 4- draw both definitions
-        img_with_text = draw_text_box(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl
-                                      , box_list_lbl=boxes_lbl, box_list_pred=boxes_pred)
+        img_with_text = draw_text_box2(img_tensor=img, text_list_pred=definitions_pred, text_list_lbl=definitions_lbl)
+        self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
+
+    def visualize(self, images, out_list_class, out_list_box, task, img_name, img_size):
+
+        box_size = 4
+        # 1- prepare image
+        img = torch.zeros([3, img_size, img_size])
+        img[0] = images[-1][self.cfg.dataloader.seq_len - 1]
+        img[1] = images[-1][2 * self.cfg.dataloader.seq_len - 1]
+        img[2] = images[-1][3 * self.cfg.dataloader.seq_len - 1]
+
+        class_lbl = []
+        class_pred = []
+        boxes_real = []
+        boxes_pred = []
+
+        for out_class_lbl in out_list_class:
+            class_pred_index = out_class_lbl[0].argmax()
+            class_lbl_index = out_class_lbl[1].argmax()
+            class_pred.append(self._labels_definition[task.get_name()][class_pred_index])
+            class_lbl.append(self._labels_definition[task.get_name()][class_lbl_index])
+
+        for out_box_predbox in out_list_box:
+            boxes_pred.append(out_box_predbox[0] * 224.)
+            boxes_real.append(out_box_predbox[1] * 224.)
+
+        # 4- draw both definitions
+        img_with_text = draw_text_box(img_tensor=img, text_list_pred=class_pred, text_list_lbl=class_lbl
+                                      , box_list_lbl=boxes_real, box_list_pred=boxes_pred)
         self.logger.log_image(image_data=img_with_text, name=img_name, image_channels='first')
 
     @timeit
     @torch.no_grad()
     def validate(self):
-    
-        self.model.eval()
-    
-        running_loss = []
 
+        self.model.eval()
+
+        running_loss = []
 
         for internel_iter, (x, gt_boxes, gt_labels, ego_labels, counts, img_indexs, wh) in enumerate(self.data_val):
             y_lbl = self.task.get_flat_label(labels=gt_labels)
             y_box = self.task.get_flat_boxes(boxes=gt_boxes)
-   
+
             # move data to device
             x = x.to(device=self.device)
             y_lbl = y_lbl.to(device=self.device)
             y_box = y_box.to(device=self.device)
-   
+
             # forward, backward
             encoded_vector = self.model(x)
             out = self.decoder(encoded_vector)
 
-            loss_lbl = self.criterion_lbl(self.sig(out[:,:-VisionTask._output_box_max_size]), y_lbl)
-            loss_box = self.criterion_box(out[:,-VisionTask._output_box_max_size:], y_box)
+            loss_lbl = self.criterion_class(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
+            loss_box = self.criterion_box(out[:, -VisionTask._output_box_max_size:], y_box)
             loss = loss_lbl + loss_box
             running_loss.append(loss.item())
 
             img_name = "img_" + str(self.epoch)
-            self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task= self.task,
-                                            output=out, img_name=img_name, img_size=wh[0][0].item())
-    
+            self.visualize(images=x, labels=gt_labels, boxes=gt_boxes, task=self.task,
+                           output=out, img_name=img_name, img_size=wh[0][0].item())
+
         # average loss
         loss = np.mean(running_loss)
-    
+
         return loss
 
     @timeit
@@ -416,7 +450,7 @@ class Learner:
                 y_box = y_box.to(device=self.device)
                 # forward
                 out = auxiliary_task.decode(encoded_vector)
-                auxiliary_loss_lbl = self.criterion_lbl(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
+                auxiliary_loss_lbl = self.criterion_class(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
                 auxiliary_loss_box = self.criterion_box(out[:, -VisionTask._output_box_max_size:], y_box)
                 auxiliary_loss = auxiliary_loss_lbl + auxiliary_loss_box
                 if total_loss is None:
@@ -432,7 +466,7 @@ class Learner:
             y_box = y_box.to(device=self.device)
             # forward
             out = self.task.decode(encoded_vector)
-            primary_loss_lbl = self.criterion_lbl(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
+            primary_loss_lbl = self.criterion_class(self.sig(out[:, :-VisionTask._output_box_max_size]), y_lbl)
             primary_loss_box = self.criterion_box(out[:, -VisionTask._output_box_max_size:], y_box)
             primary_loss = primary_loss_lbl + primary_loss_box
             total_loss += primary_loss
@@ -444,7 +478,6 @@ class Learner:
                            output=out, img_name=img_name, img_size=wh[0][0].item())
 
         return primary_loss
-
 
     def init_logger(self, cfg):
         logger = None

@@ -23,12 +23,12 @@ class TasksManager:
         self._create_task_list()
 
     def _create_task_list(self):
-        #self._tasks_list.append(TaskCreator.active_agent_detection())
-        #self._tasks_list.append(TaskCreator.action_detection())
+        self._tasks_list.append(TaskCreator.active_agent_detection())
+        self._tasks_list.append(TaskCreator.action_detection())
         self._tasks_list.append(TaskCreator.location_detection())
         self._tasks_list.append(TaskCreator.in_agent_action_detection())
         self._tasks_list.append(TaskCreator.road_event_detection())
-        
+
 
         # self._tasks_list.append(TaskCreator.av_temporal_action_segmentation())
         # self._tasks_list.append(TaskCreator.complex_road_activities_detection())
@@ -40,13 +40,13 @@ class TasksManager:
 
     def run_tasks_single(self):
         print("Signle task mode")
-        
+
         cfg_path = "./conf/config"
         for task in self._tasks_list:
             print("Task: " + task.get_name() + " started.")
             encoder = ResNet(self._seq_len, pre_trained = True)
             learner = Learner(cfg_path, data_loader_train=self._data_loader_train,
-                              data_loader_val=self._data_loader_val, encoder=encoder, decoder=task, labels_definition=self._labels_definition)
+                              data_loader_val=self._data_loader_val, task=task, labels_definition=self._labels_definition)
             acc = learner.train()
             print("Task: " + task.get_name() + " finished. Loss is: " + str(acc))
             task.set_acc_threshold(acc)
@@ -72,6 +72,3 @@ class TasksManager:
 
                     print("Primary Task: " + primary_task.get_name() + ", Auxiliary task:" + auxiliary_task.get_name()
                           + " finished. Primary loss is: " + str(acc))
-
-
-

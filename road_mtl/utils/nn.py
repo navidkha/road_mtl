@@ -1,7 +1,7 @@
 """Utils for nn module"""
 import numpy as np
 import torch.nn as nn
-from thop import profile, clever_format
+# from thop import profile, clever_format
 
 
 def check_grad_norm(net: nn.Module):
